@@ -26,12 +26,71 @@ AI tools can generate endless output, but human engineers own the ultimate outco
 │   ├── rules/
 │   │   ├── spec-first.md      # Mandates plan mode before code execution
 │   │   ├── testing.md         # Verification gates & test execution standards
-│   │   └── git-workflow.md    # PR sizing, commit hygiene, & rationale tracking
+│   │   ├── git-workflow.md    # PR sizing, commit hygiene, & rationale tracking
+│   │   ├── resilience.md      # Failure recovery, Web Vitals, & DAMP testing standards
+│   │   └── behaviors.md       # Non-negotiable agent behavioral guardrails
 │   └── skills/
 │       ├── spec-first/        # Skill to convert vague prompts into structured specs
-│       └── anti-surrender/    # Skill to enforce trade-off analysis & verification
+│       ├── anti-surrender/    # Skill to enforce trade-off analysis & verification
+│       ├── edge-case-audit/   # Skill to audit network, memory, & fallback-UI edge cases
+│       └── code-simplify/     # Skill for post-build dead-code cleanup & verification
 └── guidelines/                # Curated AI engineering principles & transcript insights
 ```
+
+---
+
+## 📦 What's Included
+
+Every file in `.claude/rules/` and `.claude/skills/` targets a specific,
+recurring failure mode in AI-assisted engineering — the goal is that an
+engineer (or an org) can drop this repo into any project and immediately get
+the same accountability guardrails, regardless of which AI tool they're
+using or how experienced they are at prompting one.
+
+### Rules (`.claude/rules/`)
+
+Rules are lazy-loaded — Claude Code pulls them in automatically when the
+context matches (editing tests, opening a plan, making a commit, touching
+async code). They set the standard; skills below give you the executable
+workflow to actually meet it.
+
+| Rule | What it enforces | Why it matters |
+|---|---|---|
+| `spec-first.md` | Requires a short spec (goal, non-goals, constraints, edge cases, plan) before non-trivial production code gets written. | Catches misunderstandings while they're a paragraph to edit, not a shipped feature to migrate — see "intent debt" in `guidelines/ai-engineering-principles.md`. |
+| `testing.md` | Mandates real test execution and pasted output — not just a claim — before a change is reported as complete, plus deliberate boundary-condition coverage. | Confidence is cheap for a model to produce regardless of whether it's warranted. Verification evidence is the only thing that actually de-risks AI output. |
+| `git-workflow.md` | Small, coherent commits; semantic commit/PR titles; ~150-line bounded PRs; ADRs for durable decisions; `state.md` for cross-session context handoff. | Keeps every PR small enough that human review is genuine evaluation, not a rubber stamp on a diff nobody could actually hold in their head. |
+| `resilience.md` | Explicit timeouts/retries/fallbacks on network calls; no silently-swallowed async errors; critical-path (LCP-first) rendering over heavy client abstractions; DAMP over DRY in tests; an anti-rationalization table for common excuses to skip tests/specs/docs. | Most production incidents come from the unhappy path being unhandled, not the happy path being wrong. Directly inspired by Addy Osmani's performance and resilience engineering principles. |
+| `behaviors.md` | Non-negotiable agent behaviors: surface assumptions before coding, stop on requirement conflicts, push back on bad patterns/security risks/tech debt, prefer simple solutions over clever abstractions, strict file-scope bounding. | Defines the baseline posture an agent should hold on *every* task — the always-on counterpart to the deliberate `anti-surrender` checkpoint below. |
+
+### Skills (`.claude/skills/`)
+
+Skills are invokable, structured workflows — call them by name in Claude
+Code, or trigger them proactively when the task matches their description.
+
+| Skill | What it does | When it triggers |
+|---|---|---|
+| `spec-first/` | Converts a vague, informal request into a structured spec/PRD: goals, non-goals, constraints, edge cases, an ordered implementation plan, and open questions flagged rather than silently guessed at. | New features, non-trivial fixes, or any request that leaves obvious gaps (unclear scope, no acceptance criteria). |
+| `anti-surrender/` | Forces a structured trade-off analysis — name the easy path, generate real alternatives, make an actual recommendation, checkpoint with the human — before proceeding on ambiguous or irreversible decisions. | Before deleting/skipping a failing test, removing a guardrail, taking an irreversible action, or when requirements admit multiple valid interpretations. |
+| `edge-case-audit/` | A DevTools-inspired audit pass across three areas: network conditions (high latency, offline, partial/malformed payloads), memory & lifecycle (leaked listeners, uncleared timers, stale state), and fallback UI (loading/error/empty states). | After implementing any feature that fetches data or subscribes to events, and before any PR touching async code is marked complete. |
+| `code-simplify/` | Post-implementation cleanup: eliminates dead code, unused imports, and orphaned variables; refactors nested conditionals into guard clauses; then re-runs the test suite to prove zero behavioral regressions. | After an implementation is functionally complete, as the last pass before opening a PR. |
+
+### Supporting documents
+
+| File | Purpose |
+|---|---|
+| `AGENTS.md` | The portable, tool-agnostic baseline every rule and skill above builds on — respected by Claude Code, Cursor, Copilot, and Gemini CLI alike. |
+| `.claude/CLAUDE.md` | Claude Code-specific configuration: code style, terminal execution safety, and the quality-gate checklist a task must clear before it's "done." |
+| `guidelines/ai-engineering-principles.md` | The human-readable *why* behind every rule — accountability, product taste, intent debt, and context preservation, explained for the humans who own the outcome. |
+
+### How this keeps engineers accountable
+
+None of these rules and skills work by trusting an AI agent's self-reported
+confidence — they work by replacing "trust me, it works" with structural
+requirements: a spec before code, evidence before "done," a bounded diff a
+human can actually review, and an explicit checkpoint before anything
+irreversible happens. The AI agent can move fast; these guardrails make sure
+speed doesn't quietly transfer accountability risk onto whoever approves the
+PR without really being able to evaluate it.
 
 ---
 
