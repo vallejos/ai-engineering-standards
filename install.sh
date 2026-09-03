@@ -2,9 +2,12 @@
 # install.sh — Symlink AI engineering standards into a target project.
 #
 # Usage:
-#   /path/to/ai-engineering-standards/install.sh [target_dir]
+#   /path/to/ai-engineering-standards/install.sh [--dry-run] [target_dir]
 #
-# If target_dir is omitted, the current working directory is used.
+# If target_dir is omitted, the current working directory is used. Pass
+# --dry-run (or -n) to see exactly what would happen without writing anything
+# — recommended the first time you run this against a project that already
+# has its own AGENTS.md or .claude/ content.
 #
 # This script symlinks (does not copy) AGENTS.md and .claude/ from this repo
 # into the target project, so every target stays in sync with a single
@@ -33,19 +36,76 @@
 set -eu
 
 # ---------------------------------------------------------------------------
+# Parse arguments
+# ---------------------------------------------------------------------------
+
+DRY_RUN=0
+TARGET_ARG=""
+
+usage() {
+    cat <<'USAGE'
+Usage: install.sh [--dry-run] [target_dir]
+
+Symlinks / merges the AI engineering standards from this repo into a target
+project. If target_dir is omitted, the current working directory is used.
+
+Options:
+  --dry-run, -n   Show exactly what would be linked, merged, or modified,
+                  without touching anything on disk.
+  --help, -h      Show this help and exit.
+USAGE
+}
+
+for arg in "$@"; do
+    case "$arg" in
+        --dry-run|-n) DRY_RUN=1 ;;
+        --help|-h) usage; exit 0 ;;
+        -*) echo "Error: unknown option: $arg" >&2; usage >&2; exit 1 ;;
+        *)
+            if [ -n "$TARGET_ARG" ]; then
+                echo "Error: more than one target directory given." >&2
+                usage >&2
+                exit 1
+            fi
+            TARGET_ARG="$arg"
+            ;;
+    esac
+done
+
+# ---------------------------------------------------------------------------
 # Resolve paths
 # ---------------------------------------------------------------------------
 
 # Directory this script lives in (the standards repo), resolved to an
 # absolute path even if invoked via a relative path or through a symlink.
+# Symlinks to the script are followed manually because `readlink -f` isn't
+# POSIX and doesn't exist on stock macOS. Without this, invoking the script
+# through e.g. ~/bin/standards-install -> repo/install.sh would resolve
+# SOURCE_DIR to ~/bin and silently create dangling symlinks in the target.
 SCRIPT_PATH="$0"
+while [ -L "$SCRIPT_PATH" ]; do
+    link_target="$(readlink "$SCRIPT_PATH")"
+    case "$link_target" in
+        /*) SCRIPT_PATH="$link_target" ;;
+        *)  SCRIPT_PATH="$(dirname "$SCRIPT_PATH")/$link_target" ;;
+    esac
+done
 case "$SCRIPT_PATH" in
     /*) : ;;
     *) SCRIPT_PATH="$(pwd)/$SCRIPT_PATH" ;;
 esac
 SOURCE_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
 
-TARGET_DIR="${1:-$(pwd)}"
+# Sanity-check that SOURCE_DIR really is the standards repo before we link
+# anything from it — a wrong SOURCE_DIR would otherwise produce dangling links.
+for required in AGENTS.md .claude/CLAUDE.md .claude/rules .claude/skills; do
+    if [ ! -e "$SOURCE_DIR/$required" ]; then
+        echo "Error: $SOURCE_DIR does not look like the standards repo (missing $required)." >&2
+        exit 1
+    fi
+done
+
+TARGET_DIR="${TARGET_ARG:-$(pwd)}"
 case "$TARGET_DIR" in
     /*) : ;;
     *) TARGET_DIR="$(pwd)/$TARGET_DIR" ;;
@@ -63,11 +123,32 @@ fi
 
 echo "Standards source: $SOURCE_DIR"
 echo "Target project:   $TARGET_DIR"
+if [ "$DRY_RUN" -eq 1 ]; then
+    echo "Mode:             DRY RUN — nothing will be written"
+fi
 echo ""
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+# do_ln SRC DEST / do_mkdir DIR / do_replace TMP DEST
+# Every mutating filesystem operation goes through one of these so --dry-run
+# can intercept it in exactly one place.
+do_ln() {
+    if [ "$DRY_RUN" -eq 1 ]; then return 0; fi
+    ln -s "$1" "$2"
+}
+
+do_mkdir() {
+    if [ "$DRY_RUN" -eq 1 ]; then return 0; fi
+    mkdir -p "$1"
+}
+
+do_replace() {
+    if [ "$DRY_RUN" -eq 1 ]; then rm -f "$1"; return 0; fi
+    mv "$1" "$2"
+}
 
 # sync_managed_block SRC DEST LABEL
 # For files where only one filename is ever read by convention (AGENTS.md,
@@ -134,7 +215,7 @@ sync_managed_block() {
         echo "$end_marker"
     } > "$tmp_new"
 
-    mv "$tmp_new" "$dest"
+    do_replace "$tmp_new" "$dest"
     rm -f "$tmp_base"
 
     echo "  MERGED  $dest -> your existing content is untouched; the"
@@ -164,7 +245,7 @@ link_or_embed() {
     fi
 
     if [ ! -e "$dest" ]; then
-        ln -s "$src" "$dest"
+        do_ln "$src" "$dest"
         echo "  LINKED  $dest -> $src"
         return 0
     fi
@@ -215,7 +296,7 @@ link_item_coexist() {
         # name as taken and fall through to the coexist path below rather
         # than silently overwriting someone else's symlink.
     elif [ ! -e "$primary_dest" ]; then
-        ln -s "$src" "$primary_dest"
+        do_ln "$src" "$primary_dest"
         echo "  LINKED  $primary_dest -> $src"
         return 0
     fi
@@ -244,7 +325,7 @@ link_item_coexist() {
         return 0
     fi
 
-    ln -s "$src" "$alt_dest"
+    do_ln "$src" "$alt_dest"
     echo "  COEXIST $alt_dest -> $src"
     echo "          ('$name' already exists in $dest_dir/ and was left untouched;"
     echo "          ours was added as '$alt_name' so both are loaded)"
@@ -278,7 +359,7 @@ merge_dir() {
     fi
 
     if [ ! -e "$dest_dir" ]; then
-        ln -s "$src_dir" "$dest_dir"
+        do_ln "$src_dir" "$dest_dir"
         echo "  LINKED  $dest_dir/ -> $src_dir/ (whole directory)"
         return 0
     fi
@@ -314,7 +395,7 @@ link_or_embed "$SOURCE_DIR/AGENTS.md" "$TARGET_DIR/AGENTS.md" "AGENTS.md"
 echo ""
 echo "Linking .claude/ ..."
 
-mkdir -p "$TARGET_DIR/.claude"
+do_mkdir "$TARGET_DIR/.claude"
 
 link_or_embed "$SOURCE_DIR/.claude/CLAUDE.md" "$TARGET_DIR/.claude/CLAUDE.md" "CLAUDE.md"
 
@@ -333,7 +414,11 @@ merge_dir "$SOURCE_DIR/.claude/skills" "$TARGET_DIR/.claude/skills"
 # ---------------------------------------------------------------------------
 
 echo ""
-echo "Done. $TARGET_DIR now points at the standards in $SOURCE_DIR."
+if [ "$DRY_RUN" -eq 1 ]; then
+    echo "Dry run complete — nothing was written. Re-run without --dry-run to apply."
+else
+    echo "Done. $TARGET_DIR now points at the standards in $SOURCE_DIR."
+fi
 echo "SKIP means an item was left completely untouched with no change made"
 echo "(only for a genuine double-collision, or something that isn't a"
 echo "regular file/directory). MERGE means an existing .claude/rules or"
