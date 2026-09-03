@@ -49,10 +49,12 @@ using or how experienced they are at prompting one.
 
 ### Rules (`.claude/rules/`)
 
-Rules are lazy-loaded — Claude Code pulls them in automatically when the
-context matches (editing tests, opening a plan, making a commit, touching
-async code). They set the standard; skills below give you the executable
-workflow to actually meet it.
+Rules are loaded at session start with the same priority as `CLAUDE.md`, so
+they're always in effect. None of them are path-scoped — they describe
+*behavior* (plan first, verify before claiming done, handle the unhappy
+path), not file types, so scoping them to a glob would just make them
+silently miss cases. They set the standard; skills below give you the
+executable workflow to actually meet it.
 
 | Rule | What it enforces | Why it matters |
 |---|---|---|
@@ -102,30 +104,58 @@ git clone https://github.com/vallejos/ai-engineering-standards.git ~/ai-engineer
 ```
 
 ### 2. Apply Standards to Any Target Codebase
-Navigate to any local project directory and run the install script to symlink the guardrails into place:
+Navigate to any local project directory and run the install script:
 
 ```bash
 cd /path/to/your-target-project
-~/ai-engineering-standards/install.sh
+~/ai-engineering-standards/install.sh --dry-run   # preview first — recommended
+~/ai-engineering-standards/install.sh             # apply
 ```
 
-This symlinks `AGENTS.md` and `.claude/` directly into your target project so your AI tools adopt your rules instantly.
+The script is safe to run on a project that already has its own AI config —
+it never overwrites or deletes anything you have:
+
+| What you already have | What the script does |
+|---|---|
+| Nothing | Symlinks `AGENTS.md`, `.claude/CLAUDE.md`, `.claude/rules/`, `.claude/skills/` into place |
+| Your own `.claude/rules/` or `.claude/skills/` | Leaves them alone; links each of our rules/skills in individually alongside yours |
+| A rule or skill with the same name as one of ours (e.g. `rules/testing.md`) | Keeps yours untouched; adds ours as `ai-engineering-standards-testing.md` so both load |
+| Your own `AGENTS.md` or `.claude/CLAUDE.md` | Keeps your content in place; appends ours below it as a clearly marked block that stays in sync on re-run |
+
+It's idempotent — re-run it any time to pick up updates. Use `--dry-run` to
+see exactly what it would do first. The script is POSIX `sh` and works on
+macOS, Linux, and WSL; on native Windows, run it from WSL or Git Bash (with
+Developer Mode enabled for symlinks).
 
 ---
 
 ## 🛠️ Usage with AI Developer Tools
 
-### **Claude Code CLI**
-Claude Code automatically detects `AGENTS.md`, `.claude/CLAUDE.md`, `.claude/rules/`, and `.claude/skills/`.
+### **Claude Code**
+Claude Code reads `.claude/CLAUDE.md`, `.claude/rules/`, and `.claude/skills/`.
+It does **not** read `AGENTS.md` directly — which is why `.claude/CLAUDE.md`
+starts with an `@../AGENTS.md` import line that pulls the shared baseline into
+context automatically. Run `/context` in a session and confirm both appear
+under **Memory files**.
 
-* **Triggering Rules:** Rules inside `.claude/rules/` are lazy-loaded when editing relevant files.
-* **Using Custom Skills:** Invoke custom skills in chat:
+* **Rules:** every file in `.claude/rules/` loads at session start with the
+  same priority as `CLAUDE.md`, so they're always in effect.
+* **Skills:** Claude uses them automatically when your request matches their
+  description, or invoke one directly by name:
   ```bash
   claude "Use the spec-first skill to outline the auth refactor"
   ```
+* If the first session shows a one-time approval dialog for an external
+  import, that's the symlinked `CLAUDE.md` resolving `@../AGENTS.md` through
+  the standards repo — approve it once and it won't ask again.
 
-### **Cursor / Copilot / Gemini CLI**
-All modern agent tools parse `AGENTS.md` at the project root to respect boundaries, testing mandates, and verification gates.
+### **Cursor / Copilot / Gemini CLI / Codex**
+These tools read `AGENTS.md` at the project root natively, so they pick up the
+shared baseline (planning, verification gates, bounded PRs, Chesterton's
+Fence) with no extra setup. They don't read `.claude/`, so the Claude-specific
+rules and skills won't apply there — `AGENTS.md` is written to stand on its
+own for exactly that reason. If Gemini CLI is configured to look only for
+`GEMINI.md` in your environment, symlink it: `ln -s AGENTS.md GEMINI.md`.
 
 ---
 
