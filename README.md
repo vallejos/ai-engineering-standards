@@ -98,7 +98,7 @@ PR without really being able to evaluate it.
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git ~/ai-engineering-standards
+git clone https://github.com/vallejos/ai-engineering-standards.git ~/ai-engineering-standards
 ```
 
 ### 2. Apply Standards to Any Target Codebase
