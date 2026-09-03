@@ -1,11 +1,6 @@
----
-trigger: before writing or modifying production code for any non-trivial task
-applies_to: "**/*"
----
-
 # Rule: Spec-First / Plan Mode
 
-## When this rule loads
+## When this rule applies
 
 This rule applies whenever you are about to write or modify production code
 and the task is **not** a trivial, obviously-scoped change (typo fix,

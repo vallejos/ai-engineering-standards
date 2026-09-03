@@ -1,10 +1,13 @@
 # AGENTS.md — Universal Agent Instructions
 
-> This file is read by Claude Code, Cursor, GitHub Copilot, Gemini CLI, and any
-> AGENTS.md-compatible agent. It defines the non-negotiable baseline for how an
-> AI coding agent operates in this codebase. Tool-specific configuration lives
-> alongside this file (e.g. `.claude/`); this file is the portable core that
-> every tool should respect regardless of vendor.
+> This file is read natively by Cursor, GitHub Copilot's coding agent, Gemini
+> CLI, OpenAI Codex, and any other AGENTS.md-compatible agent. Claude Code
+> does not read `AGENTS.md` directly — it reads `CLAUDE.md`, so
+> `.claude/CLAUDE.md` in this repo imports this file with an `@AGENTS.md`
+> line to load it. Either way, this file defines the non-negotiable baseline
+> for how an AI coding agent operates in this codebase. Tool-specific
+> configuration lives alongside it (e.g. `.claude/`); this file is the
+> portable core that every tool should respect regardless of vendor.
 
 ## 0. Prime Directive
 
@@ -144,13 +147,15 @@ Claude Code.
 ## 8. Tool-Specific Configuration
 
 This file is the portable baseline. Tool-specific behavior, quality gates, and
-lazy-loaded rules live in:
+topic-specific rules live in:
 
-- `.claude/CLAUDE.md` — Claude Code global configuration, style, and quality
-  gates.
-- `.claude/rules/` — Lazy-loaded rules Claude Code applies contextually
-  (spec-first workflow, testing, git workflow).
-- `.claude/skills/` — Executable Claude Code skills (spec-first, anti-surrender).
+- `.claude/CLAUDE.md` — Claude Code global configuration, style, terminal
+  safety, and quality gates. Imports this file so Claude Code loads it.
+- `.claude/rules/` — Topic-specific rules loaded at session start alongside
+  `CLAUDE.md`: `spec-first.md`, `testing.md`, `git-workflow.md`,
+  `resilience.md`, and `behaviors.md`.
+- `.claude/skills/` — Invokable Claude Code skills: `spec-first`,
+  `anti-surrender`, `edge-case-audit`, and `code-simplify`.
 
 Cursor, Copilot, Gemini CLI, and other AGENTS.md-aware tools should treat the
 principles in this file as binding even though they do not read `.claude/`

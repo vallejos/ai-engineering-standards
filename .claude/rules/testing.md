@@ -1,14 +1,14 @@
----
-trigger: before marking any code change complete; when editing test files or source files that have existing test coverage
-applies_to: "**/*"
----
-
 # Rule: Testing & Verification Standards
 
-## When this rule loads
+## When this rule applies
 
 This rule applies to every code change, without exception, before you report
-a task as complete. It also loads whenever you touch a test file directly.
+a task as complete. It is loaded at session start alongside `CLAUDE.md`, so
+it's always in effect — there's no need to invoke it.
+
+For how tests should be *written* (readable, DAMP over DRY), see
+`.claude/rules/resilience.md` §4. For a systematic checklist of the boundary
+conditions to cover on async/network code, use the `edge-case-audit` skill.
 
 ## Core requirement
 
