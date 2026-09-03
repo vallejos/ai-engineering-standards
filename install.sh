@@ -1,19 +1,34 @@
 #!/bin/sh
-# install.sh — Symlink AI engineering standards into a target project.
+# install.sh — Symlink AI engineering standards into a target project, or
+# into your personal Claude Code user profile.
 #
 # Usage:
 #   /path/to/ai-engineering-standards/install.sh [--dry-run] [target_dir]
+#   /path/to/ai-engineering-standards/install.sh --user [--dry-run]
 #
-# If target_dir is omitted, the current working directory is used. Pass
-# --dry-run (or -n) to see exactly what would happen without writing anything
-# — recommended the first time you run this against a project that already
-# has its own AGENTS.md or .claude/ content.
+# Project mode (default): installs AGENTS.md, .claude/CLAUDE.md,
+# .claude/rules/, and .claude/skills/ into target_dir (current directory if
+# omitted). Use this per-repo, and for the AGENTS.md baseline that Cursor,
+# Copilot, Gemini CLI, and Codex read at a project root.
 #
-# This script symlinks (does not copy) AGENTS.md and .claude/ from this repo
-# into the target project, so every target stays in sync with a single
-# source of truth. Existing files are never silently overwritten.
+# User mode (--user): installs into ~/.claude/ instead — CLAUDE.md, rules/,
+# and skills/ only. Per the Claude Code docs, personal rules in
+# ~/.claude/rules/ apply to every project on the machine automatically, so
+# this is the one-time setup instead of re-running install.sh in every repo.
+# AGENTS.md is deliberately skipped in this mode: no tool reads a copy of it
+# sitting in $HOME, so installing it there would just be inert clutter.
+# target_dir cannot be given in --user mode; the target is always $HOME.
 #
-# If the target project already has its own .claude/rules or .claude/skills
+# Pass --dry-run (or -n) to see exactly what would happen without writing
+# anything — recommended the first time you run this against a location that
+# already has its own AGENTS.md or .claude/ content, which is the normal
+# case for --user mode on a laptop you've been using Claude Code on already.
+#
+# This script symlinks (does not copy) files from this repo into the target,
+# so every target stays in sync with a single source of truth. Existing
+# files are never silently overwritten.
+#
+# If the target already has its own .claude/rules or .claude/skills
 # directory with real content in it, that directory is left completely
 # alone — this script merges our rules/skills into it item-by-item instead
 # of replacing it. If an individual item's name collides with something the
@@ -40,16 +55,24 @@ set -eu
 # ---------------------------------------------------------------------------
 
 DRY_RUN=0
+USER_MODE=0
 TARGET_ARG=""
 
 usage() {
     cat <<'USAGE'
 Usage: install.sh [--dry-run] [target_dir]
+       install.sh --user [--dry-run]
 
-Symlinks / merges the AI engineering standards from this repo into a target
-project. If target_dir is omitted, the current working directory is used.
+Project mode (default): symlinks/merges AGENTS.md and .claude/ into
+target_dir (current directory if omitted).
+
+User mode (--user): installs only .claude/CLAUDE.md, rules/, and skills/
+into ~/.claude/, which Claude Code applies to every project on this
+machine automatically. AGENTS.md is skipped (no tool reads it from $HOME).
+Cannot be combined with an explicit target_dir.
 
 Options:
+  --user          Install into ~/.claude/ instead of a project directory.
   --dry-run, -n   Show exactly what would be linked, merged, or modified,
                   without touching anything on disk.
   --help, -h      Show this help and exit.
@@ -58,6 +81,7 @@ USAGE
 
 for arg in "$@"; do
     case "$arg" in
+        --user) USER_MODE=1 ;;
         --dry-run|-n) DRY_RUN=1 ;;
         --help|-h) usage; exit 0 ;;
         -*) echo "Error: unknown option: $arg" >&2; usage >&2; exit 1 ;;
@@ -71,6 +95,13 @@ for arg in "$@"; do
             ;;
     esac
 done
+
+if [ "$USER_MODE" -eq 1 ] && [ -n "$TARGET_ARG" ]; then
+    echo "Error: --user installs into \$HOME/.claude and can't take an explicit target_dir ($TARGET_ARG)." >&2
+    usage >&2
+    exit 1
+fi
+
 
 # ---------------------------------------------------------------------------
 # Resolve paths
@@ -105,11 +136,19 @@ for required in AGENTS.md .claude/CLAUDE.md .claude/rules .claude/skills; do
     fi
 done
 
-TARGET_DIR="${TARGET_ARG:-$(pwd)}"
-case "$TARGET_DIR" in
-    /*) : ;;
-    *) TARGET_DIR="$(pwd)/$TARGET_DIR" ;;
-esac
+if [ "$USER_MODE" -eq 1 ]; then
+    if [ -z "${HOME:-}" ]; then
+        echo "Error: --user requires \$HOME to be set." >&2
+        exit 1
+    fi
+    TARGET_DIR="$HOME"
+else
+    TARGET_DIR="${TARGET_ARG:-$(pwd)}"
+    case "$TARGET_DIR" in
+        /*) : ;;
+        *) TARGET_DIR="$(pwd)/$TARGET_DIR" ;;
+    esac
+fi
 
 if [ ! -d "$TARGET_DIR" ]; then
     echo "Error: target directory does not exist: $TARGET_DIR" >&2
@@ -122,7 +161,11 @@ if [ "$SOURCE_DIR" = "$TARGET_DIR" ]; then
 fi
 
 echo "Standards source: $SOURCE_DIR"
-echo "Target project:   $TARGET_DIR"
+if [ "$USER_MODE" -eq 1 ]; then
+    echo "Target:           $TARGET_DIR (user mode — ~/.claude only, no AGENTS.md)"
+else
+    echo "Target project:   $TARGET_DIR"
+fi
 if [ "$DRY_RUN" -eq 1 ]; then
     echo "Mode:             DRY RUN — nothing will be written"
 fi
@@ -385,8 +428,14 @@ merge_dir() {
 # Link AGENTS.md
 # ---------------------------------------------------------------------------
 
-echo "Linking root files..."
-link_or_embed "$SOURCE_DIR/AGENTS.md" "$TARGET_DIR/AGENTS.md" "AGENTS.md"
+if [ "$USER_MODE" -eq 1 ]; then
+    echo "Skipping AGENTS.md (user mode) -> no tool reads a copy of it from"
+    echo "\$HOME; it only matters at a project root. Run this script without"
+    echo "--user inside a specific project if you also want AGENTS.md there."
+else
+    echo "Linking root files..."
+    link_or_embed "$SOURCE_DIR/AGENTS.md" "$TARGET_DIR/AGENTS.md" "AGENTS.md"
+fi
 
 # ---------------------------------------------------------------------------
 # Link .claude/ contents
