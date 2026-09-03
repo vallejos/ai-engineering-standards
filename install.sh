@@ -13,7 +13,14 @@
 # If the target project already has its own .claude/rules or .claude/skills
 # directory with real content in it, that directory is left completely
 # alone — this script merges our rules/skills into it item-by-item instead
-# of replacing it, so an existing custom setup is enhanced, not clobbered.
+# of replacing it. If an individual item's name collides with something the
+# target already has (e.g. their own rules/testing.md), ours is added under
+# a prefixed name (ai-engineering-standards-testing.md) so BOTH files
+# coexist and both are actually loaded, rather than ours being silently
+# dropped. AGENTS.md and .claude/CLAUDE.md are the one exception: those are
+# single fixed filenames read by convention, so a renamed copy wouldn't be
+# picked up automatically — if one already exists, it's left untouched and
+# you'll need to merge that one manually.
 #
 # POSIX sh compatible. Safe to run multiple times (idempotent).
 
@@ -85,6 +92,79 @@ link_item() {
     echo "  LINKED  $dest -> $src"
 }
 
+# Fixed prefix used to disambiguate a name collision inside rules/ or
+# skills/. Fixed (not derived from the clone directory name) so the
+# resulting filename is predictable no matter what someone names their
+# local clone of this repo.
+PREFIX="ai-engineering-standards"
+
+# link_item_coexist SRC DEST_DIR NAME
+# Like link_item, but for items inside a directory we're merging into
+# (rules/*.md, skills/*/) where BOTH our item and a pre-existing same-named
+# item need to actually take effect — not just avoid data loss. Skipping
+# entirely would silently drop our rule/skill, which defeats the point of
+# installing this repo.
+#
+# - If DEST_DIR/NAME doesn't exist, or is already our own symlink: link it
+#   there directly, same as link_item.
+# - If DEST_DIR/NAME exists as a REAL file/dir that belongs to the target
+#   project (not ours): leave it completely untouched, and instead link our
+#   item under a prefixed name (PREFIX-NAME) so both coexist and both are
+#   still picked up — Claude Code loads every file under .claude/rules/ and
+#   every directory under .claude/skills/, so a second, distinctly-named
+#   file/dir works exactly as well as the original name would have.
+link_item_coexist() {
+    src="$1"
+    dest_dir="$2"
+    name="$3"
+    primary_dest="$dest_dir/$name"
+
+    if [ -L "$primary_dest" ]; then
+        existing_target="$(readlink "$primary_dest")"
+        if [ "$existing_target" = "$src" ]; then
+            echo "  OK      $primary_dest (already linked)"
+            return 0
+        fi
+        # A symlink to something else at this exact name is unusual (could
+        # be a leftover from a differently-configured install) — treat the
+        # name as taken and fall through to the coexist path below rather
+        # than silently overwriting someone else's symlink.
+    elif [ ! -e "$primary_dest" ]; then
+        ln -s "$src" "$primary_dest"
+        echo "  LINKED  $primary_dest -> $src"
+        return 0
+    fi
+
+    # Name is taken by something real (or a foreign symlink) that isn't
+    # ours — coexist under a prefixed name instead of skipping, so this
+    # rule/skill still actually gets loaded.
+    alt_name="${PREFIX}-${name}"
+    alt_dest="$dest_dir/$alt_name"
+
+    if [ -L "$alt_dest" ]; then
+        alt_existing_target="$(readlink "$alt_dest")"
+        if [ "$alt_existing_target" = "$src" ]; then
+            echo "  OK      $alt_dest (already linked; '$name' was taken by an existing file)"
+            return 0
+        fi
+    fi
+
+    if [ -e "$alt_dest" ]; then
+        # Extremely unlikely (would require a real file already named
+        # PREFIX-NAME) — at this point we genuinely can't safely proceed
+        # for this one item without risking a clobber, so skip with a clear
+        # explanation rather than guessing further.
+        echo "  SKIP    $name -> both '$name' and '$alt_name' are already taken in $dest_dir/"
+        echo "          Resolve the naming conflict manually, then re-run this script."
+        return 0
+    fi
+
+    ln -s "$src" "$alt_dest"
+    echo "  COEXIST $alt_dest -> $src"
+    echo "          ('$name' already exists in $dest_dir/ and was left untouched;"
+    echo "          ours was added as '$alt_name' so both are loaded)"
+}
+
 # merge_dir SRC_DIR DEST_DIR
 # Links a whole directory in the common case (DEST_DIR doesn't exist yet, or
 # is already a symlink we manage), so new items added upstream show up
@@ -92,11 +172,11 @@ link_item() {
 #
 # If DEST_DIR already exists as a REAL directory (i.e. the target project
 # already has its own .claude/rules or .claude/skills with content in it),
-# we do NOT replace or merge-delete anything in it. Instead we link each
-# item inside SRC_DIR individually into DEST_DIR, so our rules/skills are
-# added alongside whatever's already there. Any item that would collide with
-# an existing same-named file/dir in DEST_DIR is skipped (via link_item),
-# same non-destructive guarantee as everywhere else in this script.
+# we do NOT replace or touch anything already in it. Instead we link each
+# item inside SRC_DIR into DEST_DIR individually via link_item_coexist,
+# which renames on a name collision rather than skipping — so our rules and
+# skills are guaranteed to actually take effect alongside whatever's
+# already there, not silently dropped because a name happened to match.
 merge_dir() {
     src_dir="$1"
     dest_dir="$2"
@@ -125,12 +205,13 @@ merge_dir() {
     fi
 
     # DEST_DIR already exists as a real directory with its own content.
-    # Never replace it — merge our items into it individually instead.
+    # Never replace it — merge our items into it individually, coexisting
+    # under a prefixed name on any collision rather than dropping the item.
     echo "  MERGE   $dest_dir/ already exists with its own content -> adding items individually (nothing existing is touched)"
     for item in "$src_dir"/*; do
         [ -e "$item" ] || continue
         name="$(basename "$item")"
-        link_item "$item" "$dest_dir/$name"
+        link_item_coexist "$item" "$dest_dir" "$name"
     done
 }
 
@@ -168,7 +249,10 @@ merge_dir "$SOURCE_DIR/.claude/skills" "$TARGET_DIR/.claude/skills"
 
 echo ""
 echo "Done. $TARGET_DIR now points at the standards in $SOURCE_DIR."
-echo "Anything marked SKIP above already existed and was left completely"
-echo "untouched. Anything marked MERGE means an existing .claude/rules or"
-echo ".claude/skills directory was preserved as-is, with our items added"
-echo "alongside it rather than replacing it."
+echo "SKIP means an item (only ever AGENTS.md or .claude/CLAUDE.md, or a"
+echo "genuine double-collision) was left completely untouched with no"
+echo "change made. MERGE means an existing .claude/rules or .claude/skills"
+echo "directory was preserved as-is, with our items added into it. COEXIST"
+echo "means one of our items had the same name as something already there,"
+echo "so it was added under a prefixed name instead — both now coexist and"
+echo "both are loaded."
