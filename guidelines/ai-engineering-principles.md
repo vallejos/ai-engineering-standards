@@ -106,8 +106,7 @@ agent itself — actually running the test suite surfaces problems (flaky
 tests, missed edge cases, environment issues) that pure code review, by a
 human or a model, would miss.
 
-## 6. Portability matters because engineering standards shouldn't be
-   vendor lock-in
+## 6. Portability matters because standards shouldn't be vendor lock-in
 
 The specific tool an engineer uses to write code with AI assistance — Claude
 Code, Cursor, Copilot, Gemini CLI, whatever comes next — is far less
@@ -118,10 +117,11 @@ shifts, which — given how fast this space is moving — will be often.
 
 `AGENTS.md` exists specifically to be the tool-agnostic core: the principles
 that should hold regardless of which agent is reading them. `.claude/`
-provides the same standards with tool-specific mechanics (lazy-loaded rules,
-invokable skills) layered on top for Claude Code users, but nothing in
-`.claude/` should ever contradict `AGENTS.md` — if it does, that's a bug in
-this repo, not a feature.
+provides the same standards with tool-specific mechanics (always-on rules,
+invokable skills, and a `CLAUDE.md` that imports `AGENTS.md` since Claude
+Code doesn't read it natively) layered on top for Claude Code users, but
+nothing in `.claude/` should ever contradict `AGENTS.md` — if it does, that's
+a bug in this repo, not a feature.
 
 ## 7. Why ~150 lines per PR, specifically
 
@@ -139,6 +139,42 @@ explicit size discipline, the natural failure mode is "reviewer approves a
 large diff they didn't actually fully understand" — which quietly reintroduces
 the accountability gap described in principle #1.
 
+## 8. The unhappy path is where incidents actually live
+
+Most production incidents aren't caused by the happy path being wrong. They're
+caused by the *unhappy* path never being handled at all: the request that
+times out instead of failing, the error that gets caught and silently
+discarded, the listener that never gets cleaned up, the empty state that
+renders as a blank screen. AI agents are especially prone to this because a
+prompt almost always describes what should happen when things work, and
+rarely describes what should happen when they don't — so an agent optimizing
+for the literal request will build the happy path beautifully and leave the
+rest to chance.
+
+`resilience.md` sets the standard (explicit timeouts, retries, and fallbacks;
+no silently swallowed errors; user-perceived performance over architectural
+elegance), and `edge-case-audit` is the concrete checklist for verifying that
+standard was actually met before shipping. The anti-rationalization table in
+`resilience.md` exists for the same reason: the unhappy path gets skipped one
+reasonable-sounding excuse at a time, and naming those excuses up front makes
+them harder to reach for.
+
+## 9. Simplicity is a deliverable, not a byproduct
+
+Working code and shippable code are not the same thing. The natural residue
+of active development — abandoned approaches, unused imports, defensive
+nesting that outlived its purpose, a clever abstraction built for a second
+use case that never arrived — is invisible to the person who wrote it and
+expensive for everyone who reads it afterward, including the next AI session
+with no memory of why any of it is there.
+
+`behaviors.md` pushes toward the simple, obvious solution from the start, and
+`code-simplify` is the explicit post-implementation pass that removes what
+accumulated anyway, then re-runs the tests to prove nothing changed. Treating
+that pass as a required step rather than an optional nicety is what keeps a
+codebase readable across many AI-assisted changes instead of gradually
+silting up.
+
 ---
 
 ## Summary
@@ -148,12 +184,14 @@ Every rule in this repository traces back to one of these ideas:
 | Principle | Rule/skill that enforces it |
 |---|---|
 | Accountability doesn't transfer to the model | Bounded PRs, verification evidence (`git-workflow.md`, `testing.md`) |
-| Product taste has to come from humans | `anti-surrender` skill |
+| Product taste has to come from humans | `anti-surrender` skill, `behaviors.md` |
 | Intent debt is the silent failure mode | `spec-first` rule and skill |
 | Context preservation across sessions | ADRs, `state.md` (`git-workflow.md`) |
 | Confidence ≠ correctness | Outer-loop verification (`testing.md`, `AGENTS.md` §4) |
-| Standards shouldn't be vendor lock-in | `AGENTS.md` as the portable core |
+| Standards shouldn't be vendor lock-in | `AGENTS.md` as the portable core, imported by `CLAUDE.md` |
 | Small diffs keep review meaningful | Bounded PR sizing (`git-workflow.md`) |
+| The unhappy path is where incidents live | `resilience.md`, `edge-case-audit` skill |
+| Simplicity is a deliverable | `behaviors.md`, `code-simplify` skill |
 
 None of this is about distrusting AI agents categorically. It's about
 recognizing that speed without accountable verification just moves risk

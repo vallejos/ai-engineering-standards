@@ -1,11 +1,6 @@
----
-trigger: before committing, opening a pull request, or ending a work session with unfinished context
-applies_to: "**/*"
----
-
 # Rule: Git Workflow & Context Preservation
 
-## When this rule loads
+## When this rule applies
 
 This rule applies whenever you're about to commit, open a PR, or wrap up a
 session that involved a non-trivial architectural decision or left work

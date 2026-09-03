@@ -1,19 +1,14 @@
----
-trigger: always — applies to every task regardless of size
-applies_to: "**/*"
----
-
 # Rule: Agent Behavioral Guardrails
 
-## When this rule loads
+## When this rule applies
 
-Unlike the other rules in this directory, this one isn't scoped to a
-particular kind of file or task — it defines non-negotiable behaviors for
-*how* you operate as an agent in this codebase, on every task, large or
-small. It's the behavioral counterpart to `anti-surrender`
-(`.claude/skills/anti-surrender/SKILL.md`): that skill is a structured
-checkpoint you invoke deliberately; this rule is the baseline you're always
-operating under, whether or not you've explicitly invoked anything.
+This rule defines non-negotiable behaviors for *how* you operate as an agent
+in this codebase, on every task, large or small — it is not about any
+particular kind of file or change. It's the behavioral counterpart to
+`anti-surrender` (`.claude/skills/anti-surrender/SKILL.md`): that skill is a
+structured checkpoint you invoke deliberately; this rule is the baseline
+you're always operating under, whether or not you've explicitly invoked
+anything.
 
 ## 1. Surface technical assumptions before writing code
 
@@ -49,7 +44,7 @@ direction is easiest to implement. Stop and surface the conflict:
   papers over the real issue.
 
 This is a direct extension of the spec-first discipline
-(`.claude/rules/spec-first.md` §4): the earlier a real conflict surfaces, the
+(`.claude/rules/spec-first.md`, step 4): the earlier a real conflict surfaces, the
 cheaper it is to resolve.
 
 ## 3. Push back on bad technical patterns, security risks, or tech debt

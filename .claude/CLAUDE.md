@@ -1,10 +1,14 @@
+@../AGENTS.md
+
 # CLAUDE.md — Global Claude Code Configuration
 
-This file configures Claude Code for this project (or, when symlinked via
+This file configures Claude Code for this project (or, when installed via
 `install.sh`, for any target project). It assumes and extends the universal
-principles in `../AGENTS.md` — read that file first if you haven't. Everything
-below is Claude Code-specific: style conventions, terminal safety, and the
-quality gates that must pass before a change is considered done.
+principles in `../AGENTS.md`, which is imported above so it loads into
+context automatically — Claude Code reads `CLAUDE.md`, not `AGENTS.md`, so
+the `@` import line is what makes the shared baseline actually take effect.
+Everything below is Claude Code-specific: style conventions, terminal safety,
+and the quality gates that must pass before a change is considered done.
 
 ---
 
@@ -12,9 +16,11 @@ quality gates that must pass before a change is considered done.
 
 - `AGENTS.md` (repo root) = what to do and why, portable across tools.
 - `CLAUDE.md` (this file) = how Claude Code specifically should behave.
-- `.claude/rules/*.md` = lazy-loaded, topic-specific rules Claude Code pulls in
-  when relevant (editing tests, opening a plan, making commits).
-- `.claude/skills/*` = invokable skills for structured workflows.
+- `.claude/rules/*.md` = topic-specific rules, loaded at session start with
+  the same priority as this file. None are path-scoped, because they describe
+  behavior rather than file types — so they are always in effect.
+- `.claude/skills/*` = invokable skills for structured workflows, loaded on
+  demand when you invoke them or when Claude judges them relevant.
 
 ---
 
@@ -74,6 +80,11 @@ each explicitly when you report completion — don't just say "done."
 - [ ] **Tests written or updated** for the behavior that changed
 - [ ] **Tests actually run**, with real output shown (see `.claude/rules/testing.md`)
 - [ ] **Build/typecheck/lint pass**, if the project has them
+- [ ] **Edge cases audited** for any change touching network calls, async
+      code, subscriptions, or UI loading/error states (run the
+      `edge-case-audit` skill; see `.claude/rules/resilience.md`)
+- [ ] **Cleanup pass done** — no dead code, unused imports, or leftover
+      debugging residue (run the `code-simplify` skill before opening a PR)
 - [ ] **Chesterton's Fence checked** for anything removed or refactored
       (see `AGENTS.md` §2)
 - [ ] **Diff is bounded** (~150 lines) or explicitly justified if not (see

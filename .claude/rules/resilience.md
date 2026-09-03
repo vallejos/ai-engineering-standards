@@ -1,11 +1,6 @@
----
-trigger: when writing or reviewing network calls, async code, UI loading/error states, or test files
-applies_to: "**/*"
----
-
 # Rule: Resilience, Web Vitals, and DAMP Testing
 
-## When this rule loads
+## When this rule applies
 
 This rule applies whenever you're writing or touching: any network call or
 other async I/O, UI states that depend on that I/O (loading, error, empty,
