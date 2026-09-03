@@ -103,53 +103,67 @@ PR without really being able to evaluate it.
 git clone https://github.com/vallejos/ai-engineering-standards.git ~/ai-engineering-standards
 ```
 
-### 2. Apply Standards to Any Target Codebase
-Navigate to any local project directory and run the install script:
+### 2. Choose Your Install Mode
 
-```bash
-cd /path/to/your-target-project
-~/ai-engineering-standards/install.sh --dry-run   # preview first — recommended
-~/ai-engineering-standards/install.sh             # apply
-```
+This repo installs two independent things, and most people want both, just
+via different commands:
 
-The script is safe to run on a project that already has its own AI config —
-it never overwrites or deletes anything you have:
+| Your situation | Run this | Installs |
+|---|---|---|
+| You use Claude Code and want these standards applied to **every repo on this machine**, without re-running anything per-project | `install.sh --user` | `.claude/CLAUDE.md`, `.claude/rules/`, `.claude/skills/` into `~/.claude/` (machine-wide, one-time) |
+| A specific repo also needs `AGENTS.md` — e.g. you or teammates use Cursor, Copilot, or Gemini CLI on it, which don't read `~/.claude/` | `install.sh` (no flag) inside that repo | `AGENTS.md` + `.claude/CLAUDE.md`, `.claude/rules/`, `.claude/skills/` into that project |
+| You only ever use Claude Code, only on one or two repos, and don't want a machine-wide change | `install.sh` (no flag) inside each repo | Same as above, scoped to that project only |
 
-| What you already have | What the script does |
-|---|---|
-| Nothing | Symlinks `AGENTS.md`, `.claude/CLAUDE.md`, `.claude/rules/`, `.claude/skills/` into place |
-| Your own `.claude/rules/` or `.claude/skills/` | Leaves them alone; links each of our rules/skills in individually alongside yours |
-| A rule or skill with the same name as one of ours (e.g. `rules/testing.md`) | Keeps yours untouched; adds ours as `ai-engineering-standards-testing.md` so both load |
-| Your own `AGENTS.md` or `.claude/CLAUDE.md` | Keeps your content in place; appends ours below it as a clearly marked block that stays in sync on re-run |
+**Most Claude Code users on multiple repos should run `--user` once** and be
+done — `~/.claude/rules/` applies to every project automatically per the
+[Claude Code docs](https://code.claude.com/docs/en/memory#organize-rules-with-claude/rules/),
+so there's nothing left to do per-repo unless that repo also needs
+`AGENTS.md` for a non-Claude tool. Running both modes together is fine and
+common: `--user` for the Claude Code baseline everywhere, plus a plain
+per-project install on the specific repos where `AGENTS.md` matters too.
 
-It's idempotent — re-run it any time to pick up updates. Use `--dry-run` to
-see exactly what it would do first. The script is POSIX `sh` and works on
-macOS, Linux, and WSL; on native Windows, run it from WSL or Git Bash (with
-Developer Mode enabled for symlinks).
-
-### 3. Or Install Once, Machine-Wide (Recommended)
-
-If you use Claude Code across many repos, install into your personal profile
-instead of running the script per-project:
+#### Machine-wide (`--user`)
 
 ```bash
 ~/ai-engineering-standards/install.sh --user --dry-run   # preview first
 ~/ai-engineering-standards/install.sh --user              # apply
 ```
 
-This installs only `.claude/CLAUDE.md`, `.claude/rules/`, and
-`.claude/skills/` into `~/.claude/` — Claude Code applies personal rules in
-`~/.claude/rules/` to every project on the machine automatically, so this is
-a one-time setup rather than something you repeat per repo. `AGENTS.md` is
-deliberately skipped in this mode: it's a project-root convention file that
-Cursor, Copilot, and Gemini CLI look for per-repo, so a copy sitting in
-`$HOME` would just be inert clutter nothing reads. Run the script without
-`--user` inside a specific project if you also want the shared `AGENTS.md`
-baseline there for those other tools.
+Installs only `.claude/CLAUDE.md`, `.claude/rules/`, and `.claude/skills/`
+into `~/.claude/`. `AGENTS.md` is deliberately **not** installed in this
+mode: it's a project-root convention file that Cursor, Copilot, and Gemini
+CLI look for per-repo, so a copy sitting in `$HOME` would never be read by
+anything — it'd just be clutter.
 
-The same non-destructive merge/coexist behavior from the table above applies
-here too — safe to run against a `~/.claude/` that already has plenty of
-your own rules and skills in it.
+#### Per-project (default, no flag)
+
+```bash
+cd /path/to/your-target-project
+~/ai-engineering-standards/install.sh --dry-run   # preview first
+~/ai-engineering-standards/install.sh             # apply
+```
+
+Installs `AGENTS.md` plus the full `.claude/` set into that one project.
+Use this for a repo other tools (Cursor/Copilot/Gemini CLI) also touch, or
+if you'd rather scope everything to specific repos instead of your whole
+machine.
+
+#### Both modes are non-destructive
+
+Whichever you run, the script is safe against a target that already has its
+own AI config — it never overwrites or deletes anything:
+
+| What's already there | What the script does |
+|---|---|
+| Nothing | Symlinks the relevant files into place |
+| Your own `.claude/rules/` or `.claude/skills/` | Leaves them alone; links each of our rules/skills in individually alongside yours |
+| A rule or skill with the same name as one of ours (e.g. `rules/testing.md`) | Keeps yours untouched; adds ours as `ai-engineering-standards-testing.md` so both load |
+| Your own `AGENTS.md` or `.claude/CLAUDE.md` | Keeps your content in place; appends ours below it as a clearly marked block that stays in sync on re-run |
+
+It's idempotent — re-run either mode any time to pick up updates. Use
+`--dry-run` to see exactly what it would do first. The script is POSIX `sh`
+and works on macOS, Linux, and WSL; on native Windows, run it from WSL or
+Git Bash (with Developer Mode enabled for symlinks).
 
 ---
 
