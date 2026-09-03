@@ -127,6 +127,30 @@ see exactly what it would do first. The script is POSIX `sh` and works on
 macOS, Linux, and WSL; on native Windows, run it from WSL or Git Bash (with
 Developer Mode enabled for symlinks).
 
+### 3. Or Install Once, Machine-Wide (Recommended)
+
+If you use Claude Code across many repos, install into your personal profile
+instead of running the script per-project:
+
+```bash
+~/ai-engineering-standards/install.sh --user --dry-run   # preview first
+~/ai-engineering-standards/install.sh --user              # apply
+```
+
+This installs only `.claude/CLAUDE.md`, `.claude/rules/`, and
+`.claude/skills/` into `~/.claude/` — Claude Code applies personal rules in
+`~/.claude/rules/` to every project on the machine automatically, so this is
+a one-time setup rather than something you repeat per repo. `AGENTS.md` is
+deliberately skipped in this mode: it's a project-root convention file that
+Cursor, Copilot, and Gemini CLI look for per-repo, so a copy sitting in
+`$HOME` would just be inert clutter nothing reads. Run the script without
+`--user` inside a specific project if you also want the shared `AGENTS.md`
+baseline there for those other tools.
+
+The same non-destructive merge/coexist behavior from the table above applies
+here too — safe to run against a `~/.claude/` that already has plenty of
+your own rules and skills in it.
+
 ---
 
 ## 🛠️ Usage with AI Developer Tools
