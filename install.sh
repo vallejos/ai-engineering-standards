@@ -10,6 +10,11 @@
 # into the target project, so every target stays in sync with a single
 # source of truth. Existing files are never silently overwritten.
 #
+# If the target project already has its own .claude/rules or .claude/skills
+# directory with real content in it, that directory is left completely
+# alone — this script merges our rules/skills into it item-by-item instead
+# of replacing it, so an existing custom setup is enhanced, not clobbered.
+#
 # POSIX sh compatible. Safe to run multiple times (idempotent).
 
 set -eu
@@ -80,6 +85,55 @@ link_item() {
     echo "  LINKED  $dest -> $src"
 }
 
+# merge_dir SRC_DIR DEST_DIR
+# Links a whole directory in the common case (DEST_DIR doesn't exist yet, or
+# is already a symlink we manage), so new items added upstream show up
+# automatically without re-running this script.
+#
+# If DEST_DIR already exists as a REAL directory (i.e. the target project
+# already has its own .claude/rules or .claude/skills with content in it),
+# we do NOT replace or merge-delete anything in it. Instead we link each
+# item inside SRC_DIR individually into DEST_DIR, so our rules/skills are
+# added alongside whatever's already there. Any item that would collide with
+# an existing same-named file/dir in DEST_DIR is skipped (via link_item),
+# same non-destructive guarantee as everywhere else in this script.
+merge_dir() {
+    src_dir="$1"
+    dest_dir="$2"
+
+    if [ -L "$dest_dir" ]; then
+        existing_target="$(readlink "$dest_dir")"
+        if [ "$existing_target" = "$src_dir" ]; then
+            echo "  OK      $dest_dir/ (already linked)"
+        else
+            echo "  SKIP    $dest_dir/ -> exists as a symlink to a different target ($existing_target)"
+            echo "          Remove it manually if you want to relink: rm '$dest_dir'"
+        fi
+        return 0
+    fi
+
+    if [ ! -e "$dest_dir" ]; then
+        ln -s "$src_dir" "$dest_dir"
+        echo "  LINKED  $dest_dir/ -> $src_dir/ (whole directory)"
+        return 0
+    fi
+
+    if [ ! -d "$dest_dir" ]; then
+        echo "  SKIP    $dest_dir -> already exists and is not a directory."
+        echo "          Move or remove it manually if you want to link a directory here."
+        return 0
+    fi
+
+    # DEST_DIR already exists as a real directory with its own content.
+    # Never replace it — merge our items into it individually instead.
+    echo "  MERGE   $dest_dir/ already exists with its own content -> adding items individually (nothing existing is touched)"
+    for item in "$src_dir"/*; do
+        [ -e "$item" ] || continue
+        name="$(basename "$item")"
+        link_item "$item" "$dest_dir/$name"
+    done
+}
+
 # ---------------------------------------------------------------------------
 # Link AGENTS.md
 # ---------------------------------------------------------------------------
@@ -98,11 +152,15 @@ mkdir -p "$TARGET_DIR/.claude"
 
 link_item "$SOURCE_DIR/.claude/CLAUDE.md" "$TARGET_DIR/.claude/CLAUDE.md"
 
-# rules/ and skills/ are linked as whole directories, not file-by-file, so
-# that adding a new rule/skill upstream shows up in every target
-# automatically without re-running install.sh.
-link_item "$SOURCE_DIR/.claude/rules" "$TARGET_DIR/.claude/rules"
-link_item "$SOURCE_DIR/.claude/skills" "$TARGET_DIR/.claude/skills"
+# rules/ and skills/ are linked as a whole directory when the target doesn't
+# already have one of its own (the common case) — this means a new rule or
+# skill added upstream shows up in every target automatically without
+# re-running install.sh. If the target already has its own .claude/rules or
+# .claude/skills with real content in it, we never replace or touch that
+# directory — we merge our items into it individually instead, so someone's
+# existing custom setup is enhanced, not clobbered.
+merge_dir "$SOURCE_DIR/.claude/rules" "$TARGET_DIR/.claude/rules"
+merge_dir "$SOURCE_DIR/.claude/skills" "$TARGET_DIR/.claude/skills"
 
 # ---------------------------------------------------------------------------
 # Done
@@ -110,5 +168,7 @@ link_item "$SOURCE_DIR/.claude/skills" "$TARGET_DIR/.claude/skills"
 
 echo ""
 echo "Done. $TARGET_DIR now points at the standards in $SOURCE_DIR."
-echo "Existing files, if any were skipped above, were left untouched — remove"
-echo "them manually and re-run this script if you want them replaced with links."
+echo "Anything marked SKIP above already existed and was left completely"
+echo "untouched. Anything marked MERGE means an existing .claude/rules or"
+echo ".claude/skills directory was preserved as-is, with our items added"
+echo "alongside it rather than replacing it."
