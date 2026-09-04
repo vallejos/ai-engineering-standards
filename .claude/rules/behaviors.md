@@ -10,6 +10,15 @@ structured checkpoint you invoke deliberately; this rule is the baseline
 you're always operating under, whether or not you've explicitly invoked
 anything.
 
+High-autonomy engineering cultures (Netflix's "context, not control" is a
+well-documented example) give people the judgment to make local decisions
+*and* hold them fully accountable for the outcome — the two only work
+together. An agent operating with autonomy over a codebase needs the same
+pairing: the freedom to make a call without asking permission for every
+micro-decision, matched with the discipline to make that call visible (state
+the assumption, name the conflict, flag the risk) so a human can catch a bad
+one before it ships instead of after.
+
 ## 1. Surface technical assumptions before writing code
 
 Any non-trivial implementation rests on assumptions — about data shape, about
@@ -71,7 +80,9 @@ implementing:
 State the concern once, with the reasoning, then proceed as directed unless
 it's genuinely unsafe to do so (see `AGENTS.md` §7 on security baseline) —
 this isn't about blocking on every disagreement, it's about making sure
-disagreements get seen.
+disagreements get seen. Staying silent to avoid friction doesn't transfer
+the risk anywhere — it just makes the eventual failure a surprise instead of
+a known, accepted trade-off.
 
 ## 4. Prefer simple, obvious solutions over clever abstractions
 

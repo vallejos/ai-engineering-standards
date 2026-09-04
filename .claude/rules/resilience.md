@@ -4,10 +4,13 @@
 
 This rule applies whenever you're writing or touching: any network call or
 other async I/O, UI states that depend on that I/O (loading, error, empty,
-partial data), or test files. The throughline is a simple one — most
-production incidents aren't caused by the happy path being wrong, they're
-caused by the *unhappy* path never being handled at all. This rule exists to
-make the unhappy path a first-class citizen instead of an afterthought.
+partial data), test files, or the design of a non-trivial architectural
+change (new service, data model change, cross-cutting refactor, new external
+dependency). The throughline is a simple one — most production incidents
+aren't caused by the happy path being wrong, they're caused by the *unhappy*
+path never being handled at all, or by a decision that was never actually
+compared against an alternative. This rule exists to make the unhappy path
+and the design trade-off first-class citizens instead of an afterthought.
 
 ## 1. Explicit failure recovery
 
@@ -30,7 +33,44 @@ what does the user see while any of that is happening?*
   a fallback for: request pending, request failed, request succeeded with
   empty results.
 
-## 2. No silent drops
+## 2. Graceful System Degradation
+
+A service under real duress doesn't get to choose between "fully working" and
+"fully down" — the actual failure mode in production is somewhere in between,
+and that in-between has to be designed on purpose, not discovered live during
+an incident.
+
+- **Explicit fallbacks and circuit breakers.** Any call to a dependency
+  (internal service, third-party API, database) that can be slow or
+  unavailable needs a defined fallback — a cached/stale value, a
+  reduced-fidelity response, or a fast, explicit failure — never an unbounded
+  wait that ties up the caller. Wrap flaky dependencies in a circuit breaker
+  (or the framework's equivalent) that trips after repeated failures and
+  stops sending load to a struggling downstream, rather than piling more
+  requests onto something that's already failing.
+- **Shed load by priority, not evenly.** A system under duress should degrade
+  its least-critical functionality first and keep its most-critical path
+  alive longest, not fail uniformly across every feature. That requires
+  knowing, before an incident, which parts of the system must stay up versus
+  which can be paused, queued, or degraded to protect the critical path —
+  and holding the critical-path pieces to a correspondingly higher bar for
+  testing and resilience, the way a live-video system has to treat its
+  playback and delivery path as higher-tier than everything feeding into it.
+- **Design the degraded state before you need it, not during the incident.**
+  Decide what "bandwidth-constrained" or "reduced fidelity" actually means
+  for this system at design time. A fallback improvised under pressure is a
+  fallback that's never been tested. If a spec for a new system doesn't say
+  what it does under duress, that's a gap in the spec per
+  `.claude/rules/spec-first.md`, not an acceptable omission — real incident
+  reviews consistently produce exactly this kind of finding (how do we
+  direct traffic when we're congested, what do we degrade first) precisely
+  because it wasn't decided in advance.
+- **No hard failure where a degraded response is possible.** Prefer "return
+  cached/stale data with a staleness indicator" or "disable a non-critical
+  widget" over "500 the whole page" whenever the failing dependency isn't
+  actually required for the primary user-facing outcome.
+
+## 3. No silent drops
 
 An error that is caught and discarded is strictly worse than an error that
 crashes loudly, because it hides the failure from everyone — the user, the
@@ -51,7 +91,7 @@ actual cause.
   the ones most likely to vanish silently because there's no caller waiting
   to notice the failure.
 
-## 3. User-perceived performance over client abstractions
+## 4. User-perceived performance over client abstractions
 
 Prioritize what the user actually experiences over what's architecturally
 elegant on the client:
@@ -75,7 +115,40 @@ elegant on the client:
   platform) to justify the trade-off, rather than a vague sense that one
   approach "feels faster."
 
-## 4. DAMP test design
+## 5. Design-Doc Guardrails for Architectural Changes
+
+`.claude/rules/spec-first.md` requires a spec for any non-trivial change. For
+changes that are specifically *architectural* — a new service, a data model
+change, a cross-cutting refactor, a new external dependency, anything other
+systems or teams will build on top of — that spec needs a sharper edge than
+the general template, because the cost of a wrong call compounds the longer
+other things depend on it.
+
+- Before implementation starts, the spec must explicitly include:
+  - **Goals** — sharpened enough that a reviewer can tell a passable design
+    from a good one, not just "what this is for" restated.
+  - **Non-goals** — named explicitly rather than left implicit, so scope
+    creep has something concrete to be checked against later.
+  - **Alternatives considered** — at least one other real approach, with a
+    stated reason it was rejected. A design doc with no alternatives section
+    is a decision with no visible reasoning behind it: nobody downstream can
+    tell whether the chosen approach was actually compared to anything, or
+    was just the first idea that came to mind.
+- This extends the existing spec-first template
+  (`.claude/rules/spec-first.md`) — add an "Alternatives Considered"
+  subsection to that spec for architectural-scope changes rather than
+  maintaining a second, parallel document format.
+- Apply the same skepticism to "this is too small for a design doc" that
+  `.claude/rules/spec-first.md` applies to "too small for a spec": the bar is
+  whether other systems or teams will build on this decision, not how many
+  lines of code it takes to implement. A project being small in scope today
+  doesn't mean the decision underneath it is small.
+- If there's no reviewer available to send the doc to, the "alternatives
+  considered" section still has to exist — write it for the human who
+  approves the change, so they're evaluating a decision instead of
+  rubber-stamping the only option they were shown.
+
+## 6. DAMP test design
 
 Tests are documentation that happens to be executable. Optimizing test setup
 code for DRY-ness the same way you'd optimize production code usually makes
@@ -98,7 +171,7 @@ chase down.
 - Name tests descriptively enough that a failure in CI is understandable from
   the test name alone, before even opening the file.
 
-## 5. Anti-Rationalization Protocol
+## 7. Anti-Rationalization Protocol
 
 Skipping tests, specs, or docs "just this once" is how test debt and
 intent debt (see `guidelines/ai-engineering-principles.md`) actually
@@ -117,14 +190,20 @@ human rather than silently skipping it.
 | "Nobody will read the docs/spec anyway." | The primary reader of a spec is often the agent or engineer picking this back up in six months with zero memory of today's context — including a future instance of you. |
 | "The test suite is slow, I don't want to add more to it." | A slow suite is a separate problem to fix (parallelize, split unit/integration tiers) — it's not a reason to reduce coverage. |
 | "This is throwaway/prototype code, standards don't apply." | Prototype code has a well-documented tendency to end up in production unchanged. If it's genuinely throwaway, say so explicitly and get sign-off that it won't ship as-is. |
+| "It's a small service, it doesn't need a design doc." | Size of implementation isn't the bar — whether other systems or teams will build on this decision is. A ten-line service other things depend on needs the same "alternatives considered" scrutiny as a large one. |
+| "We can add a fallback later if this turns out to be critical." | Graceful degradation can't be retrofitted after the fact onto a system that was never designed to shed load — the usual way this gets discovered is during the incident that actually needed it. |
 
 ## Anti-patterns this rule prevents
 
 - A `fetch` call with no timeout that hangs a UI indefinitely on a bad
   connection.
+- A dependency call with no circuit breaker that keeps hammering a struggling
+  downstream instead of failing fast and shedding load.
 - A `catch {}` block that makes a real production error invisible.
 - A client-side abstraction layer that delays LCP for the sake of
   "clean architecture."
+- An architectural decision shipped with no alternatives considered, so no
+  one downstream can tell whether it was actually compared to anything.
 - A test suite so DRY that a single failure requires reading four files to
   understand what broke.
 - Test/doc debt accumulating one "just this once" at a time.
