@@ -1,6 +1,6 @@
 ---
 name: code-simplify
-description: Runs a post-implementation cleanup pass over code just written or modified — eliminating dead code, unused imports, and orphaned variables, refactoring nested conditionals into guard clauses, and then running the automated test suite to verify zero behavioral regressions. Use this after any non-trivial implementation is functionally complete and before declaring the task done, or when the user asks to "clean up," "simplify," or "tidy" code. Always run this before a final PR is opened — it's the last pass between "it works" and "it's ready for review."
+description: Runs a post-implementation cleanup pass over code just written or modified — eliminating dead code, unused imports, and orphaned variables/orphaned logic; refactoring nested conditionals into guard clauses and extracting complex boolean conditions into well-named predicates; and then running the automated test suite to verify zero behavioral regressions. Use this after any non-trivial implementation is functionally complete and before declaring the task done, or when the user asks to "clean up," "simplify," or "tidy" code. Always run this before a final PR is opened — it's the last pass between "it works" and "it's ready for review."
 ---
 
 # Code Simplify
@@ -28,7 +28,7 @@ right in the first place.
 
 ## Process
 
-### 1. Eliminate dead code and unused imports
+### 1. Eliminate dead code, unused imports, and orphaned logic
 
 - Remove functions, variables, and code branches that are no longer called
   or reachable as a result of this change — including anything left over
@@ -45,7 +45,7 @@ right in the first place.
   part of a public API another package depends on. When in doubt, flag it
   rather than deleting it silently.
 
-### 2. Guard clause refactoring
+### 2. Guard clause refactoring and boolean simplification
 
 Look for deeply nested conditionals — the classic "arrow code" shape where
 each new condition adds another level of indentation — and flatten them
@@ -82,6 +82,35 @@ function processOrder(order) {
 }
 ```
 
+The same guard-clause thinking applies to a **complex boolean condition** —
+one `if` with enough `&&`/`||`/negation packed into it that a reader has to
+mentally evaluate the expression rather than read its intent. Extract it into
+a well-named predicate (a local variable or function) instead of leaving it
+inline:
+
+**Before:**
+```javascript
+if (user.role === "admin" || (user.role === "editor" && !document.isLocked && document.ownerId === user.id)) {
+  return allowEdit(document);
+}
+```
+
+**After:**
+```javascript
+const isAdmin = user.role === "admin";
+const isUnlockedOwnDocument =
+  user.role === "editor" && !document.isLocked && document.ownerId === user.id;
+
+if (isAdmin || isUnlockedOwnDocument) {
+  return allowEdit(document);
+}
+```
+
+The extracted names document *why* the condition matters, not just what it
+evaluates to character-by-character — which is the same win a guard clause
+gets from flattening indentation, applied to the condition itself instead of
+the branching structure around it.
+
 Guidelines for this pass:
 
 - Invert the condition and return/throw/continue early for the failure or
@@ -90,14 +119,16 @@ Guidelines for this pass:
   expensive, when order doesn't otherwise matter, so the function bails out
   as early as possible.
 - Don't over-apply this — a guard clause that makes a two-line function
-  harder to read for the sake of the pattern isn't an improvement. The goal
-  is readability, not mechanically eliminating every `else`.
+  harder to read for the sake of the pattern isn't an improvement, and a
+  boolean condition that's already a single clear comparison doesn't need a
+  named variable just to have one. The goal is readability, not mechanically
+  eliminating every `else` or every inline condition.
 - This is a refactor, not a rewrite: the observable behavior (what errors get
   thrown, what gets returned, for which inputs) must stay identical. If
   flattening the logic reveals that the original nested version had a bug
-  (e.g. a missing check), fix that as a clearly-called-out, separate concern
-  — don't silently change behavior inside what's presented as a pure
-  simplification.
+  (e.g. a missing check, an operator-precedence mistake in a boolean
+  expression), fix that as a clearly-called-out, separate concern — don't
+  silently change behavior inside what's presented as a pure simplification.
 
 ### 3. Verification pass — prove zero regressions
 
@@ -128,7 +159,8 @@ diff:
 ## Cleanup pass: <feature/file(s)>
 
 - Removed: <N unused imports, M dead functions/branches — name them briefly>
-- Refactored: <N nested conditionals flattened to guard clauses in <file>>
+- Refactored: <N nested conditionals flattened to guard clauses, M complex
+  boolean conditions extracted to named predicates in <file>>
 - Verification: ran `<test command>` — <pass count> passing, unchanged from
   before cleanup. `<lint/build command>` — clean.
 ```
@@ -139,6 +171,8 @@ diff:
   imports from the development process.
 - Deeply nested conditional logic that's hard to reason about and easy to
   introduce bugs into on the next edit.
+- A sprawling `&&`/`||` boolean expression that a reader has to trace
+  operator-by-operator to understand, instead of reading a named predicate.
 - "Simplification" that silently changes behavior because it was never
   actually re-verified against the test suite.
 - Deleting code that looks dead but was actually load-bearing, because

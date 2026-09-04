@@ -1,6 +1,6 @@
 ---
 name: edge-case-audit
-description: Systematically audits code for unhandled edge cases the happy path misses — high-latency/offline/partial-payload network conditions, memory leaks and uncleaned event listeners, stale state, and missing fallback UI (loading skeletons, error boundaries, user-facing error messages). Use this whenever the user asks to "audit," "stress-test," "harden," or "check the edge cases" of a feature, before shipping anything that fetches data or subscribes to events, or when reviewing a PR that touches network calls, subscriptions, or async state. Also use proactively after implementing a new data-fetching component or feature, even if the user didn't explicitly ask for an audit — treat "implement X" as implicitly including "and make sure X doesn't fall over under real-world network/memory conditions."
+description: Systematically audits code for unhandled edge cases the happy path misses — high-latency/offline/partial-payload network conditions, memory leaks, uncleaned event listeners, unhandled promise rejections, stale state, and missing fallback UI (loading skeletons, error boundaries, user-facing error messages, graceful degradation under bandwidth/compute constraints). Use this whenever the user asks to "audit," "stress-test," "harden," or "check the edge cases" of a feature, before shipping anything that fetches data or subscribes to events, or when reviewing a PR that touches network calls, subscriptions, or async state. Also use proactively after implementing a new data-fetching component or feature, even if the user didn't explicitly ask for an audit — treat "implement X" as implicitly including "and make sure X doesn't fall over under real-world network/memory conditions."
 ---
 
 # Edge-Case Audit
@@ -82,6 +82,16 @@ the code does in each case:
   IndexedDB, a global store), confirm old/invalid entries get cleaned up or
   migrated rather than silently accumulating or causing a stale-shape bug
   after a schema change.
+- **Unhandled promise rejections.** For every `async` call site or raw
+  `.then()` chain, confirm there's a `.catch()` or surrounding `try`/`catch`
+  — a rejection with nothing downstream to handle it doesn't fail loudly, it
+  disappears (surfacing only as an "Unhandled Promise Rejection" console
+  warning nobody's watching, or a silently-crashed background task). This
+  applies doubly to fire-and-forget calls (an async call whose result is
+  never awaited or returned) and to event handlers/background jobs, which
+  have no caller waiting to notice the failure — see
+  `.claude/rules/resilience.md` §3 (No silent drops) for the logging
+  standard once it is caught.
 
 ### 3. Fallback UI audit
 
@@ -103,6 +113,18 @@ states are handled, not just the success case:
 - **Partial-failure state.** For UI composed of multiple independent data
   sources (e.g. a dashboard with several widgets), does one widget's failure
   take down the whole page, or does it fail gracefully in isolation?
+- **Graceful degradation under bandwidth/compute constraints.** Per
+  `.claude/rules/resilience.md` §2, does the feature have an explicit
+  reduced-fidelity path instead of only "full experience" or "broken"? On a
+  throttled connection, does a media-heavy or data-heavy view drop to a
+  lower-quality/lower-volume response rather than timing out or hanging? On
+  a low-end device or under heavy main-thread load, does an
+  expensive client-side computation (large list rendering, heavy
+  client-side filtering/sorting, a large in-browser transform) degrade
+  (pagination, virtualization, a "simplified view" toggle) instead of
+  freezing the UI? If the feature has no such path, that's a gap to flag,
+  not something to assume away because local dev has a fast connection and
+  a fast machine.
 
 ## Output format
 
@@ -123,11 +145,15 @@ per `.claude/rules/behaviors.md`.
 ### Memory & lifecycle
 - ✅ WebSocket subscription cleaned up in effect teardown
 - ⚠️ `setInterval` polling loop has no `clearInterval` on unmount
+- ⚠️ `fetchAnalytics()` fire-and-forget call has no `.catch()` — a rejection
+  here vanishes silently
 
 ### Fallback UI
 - ✅ Loading skeleton present
 - ✅ Error boundary present
 - ⚠️ No distinct empty state — empty results render as a blank area
+- ⚠️ No reduced-fidelity path for the video preview grid on a throttled
+  connection — it just hangs until every thumbnail loads or times out
 ```
 
 ## Anti-patterns this skill prevents
@@ -138,3 +164,8 @@ per `.claude/rules/behaviors.md`.
   long after the PR that introduced them has been forgotten.
 - Blank or broken screens that look like the app crashed, when the real
   cause was an unhandled error or empty-data case.
+- A rejected promise nobody awaited or caught, surfacing only as a console
+  warning until it eventually takes down a background job or a queue worker.
+- An "all or nothing" feature that works great on a fast connection or a
+  fast machine and is simply unusable — not degraded, unusable — on a
+  throttled connection or a low-end device.
