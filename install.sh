@@ -58,6 +58,12 @@ DRY_RUN=0
 USER_MODE=0
 TARGET_ARG=""
 
+# Counts symlink attempts that didn't produce a real symlink, so the script
+# can keep going (report every item, not just the first failure) and still
+# exit non-zero at the end for scripted/CI callers. See do_ln for why this
+# can't just be "ln's exit code was non-zero".
+SYMLINK_FAILURES=0
+
 usage() {
     cat <<'USAGE'
 Usage: install.sh [--dry-run] [target_dir]
@@ -180,12 +186,50 @@ echo ""
 # can intercept it in exactly one place.
 do_ln() {
     if [ "$DRY_RUN" -eq 1 ]; then return 0; fi
-    ln -s "$1" "$2"
+
+    ln_error="$(ln -s "$1" "$2" 2>&1)"
+    ln_status=$?
+
+    # Trusting ln's exit code alone is not enough: some `ln` builds on
+    # Windows (Git Bash/MSYS without Developer Mode or an elevated shell)
+    # silently fall back to *copying* the source instead of creating a
+    # symlink, and still exit 0. A copy looks identical to a real symlink to
+    # every caller of do_ln, but it will never track upstream changes, and
+    # on the next run it gets mistaken for the target's own pre-existing
+    # content by link_or_embed/sync_managed_block — which then appends a
+    # second full copy as a "managed block" on top of the first, corrupting
+    # the file. Checking -L after the fact catches both a hard failure and
+    # this silent-copy fallback.
+    if [ "$ln_status" -ne 0 ] || [ ! -L "$2" ]; then
+        # Safe to remove unconditionally: every call site only reaches
+        # do_ln after confirming $2 didn't already exist, so this can only
+        # ever delete the bogus copy/partial output ln itself just produced
+        # for this exact call, never anything the user (or an earlier run)
+        # put there.
+        rm -rf "$2"
+        echo "  ERROR   could not create a real symlink at $2" >&2
+        if [ -n "$ln_error" ]; then
+            echo "          $ln_error" >&2
+        else
+            echo "          'ln -s' exited 0 but left a regular file/directory" >&2
+            echo "          instead of a symlink — seen on Windows when Developer" >&2
+            echo "          Mode / admin rights aren't available." >&2
+        fi
+        echo "          Fix: enable Developer Mode (Windows) or run this from WSL," >&2
+        echo "          then re-run install.sh." >&2
+        SYMLINK_FAILURES=$((SYMLINK_FAILURES + 1))
+        return 1
+    fi
 }
 
 do_mkdir() {
     if [ "$DRY_RUN" -eq 1 ]; then return 0; fi
-    mkdir -p "$1"
+    if ! mkdir_error="$(mkdir -p "$1" 2>&1)"; then
+        echo "Error: could not create directory $1" >&2
+        echo "  $mkdir_error" >&2
+        echo "  (a parent path segment likely exists already as a regular file)" >&2
+        exit 1
+    fi
 }
 
 do_replace() {
@@ -288,8 +332,9 @@ link_or_embed() {
     fi
 
     if [ ! -e "$dest" ]; then
-        do_ln "$src" "$dest"
-        echo "  LINKED  $dest -> $src"
+        if do_ln "$src" "$dest"; then
+            echo "  LINKED  $dest -> $src"
+        fi
         return 0
     fi
 
@@ -339,8 +384,9 @@ link_item_coexist() {
         # name as taken and fall through to the coexist path below rather
         # than silently overwriting someone else's symlink.
     elif [ ! -e "$primary_dest" ]; then
-        do_ln "$src" "$primary_dest"
-        echo "  LINKED  $primary_dest -> $src"
+        if do_ln "$src" "$primary_dest"; then
+            echo "  LINKED  $primary_dest -> $src"
+        fi
         return 0
     fi
 
@@ -368,10 +414,11 @@ link_item_coexist() {
         return 0
     fi
 
-    do_ln "$src" "$alt_dest"
-    echo "  COEXIST $alt_dest -> $src"
-    echo "          ('$name' already exists in $dest_dir/ and was left untouched;"
-    echo "          ours was added as '$alt_name' so both are loaded)"
+    if do_ln "$src" "$alt_dest"; then
+        echo "  COEXIST $alt_dest -> $src"
+        echo "          ('$name' already exists in $dest_dir/ and was left untouched;"
+        echo "          ours was added as '$alt_name' so both are loaded)"
+    fi
 }
 
 # merge_dir SRC_DIR DEST_DIR
@@ -402,8 +449,9 @@ merge_dir() {
     fi
 
     if [ ! -e "$dest_dir" ]; then
-        do_ln "$src_dir" "$dest_dir"
-        echo "  LINKED  $dest_dir/ -> $src_dir/ (whole directory)"
+        if do_ln "$src_dir" "$dest_dir"; then
+            echo "  LINKED  $dest_dir/ -> $src_dir/ (whole directory)"
+        fi
         return 0
     fi
 
@@ -465,6 +513,10 @@ merge_dir "$SOURCE_DIR/.claude/skills" "$TARGET_DIR/.claude/skills"
 echo ""
 if [ "$DRY_RUN" -eq 1 ]; then
     echo "Dry run complete — nothing was written. Re-run without --dry-run to apply."
+elif [ "$SYMLINK_FAILURES" -gt 0 ]; then
+    echo "Finished with $SYMLINK_FAILURES symlink error(s) — see ERROR lines above."
+    echo "Everything else listed above was applied; re-run after fixing the"
+    echo "symlink issue to pick up the rest."
 else
     echo "Done. $TARGET_DIR now points at the standards in $SOURCE_DIR."
 fi
@@ -477,3 +529,7 @@ echo "something already there, so it was added under a prefixed name"
 echo "instead — both now coexist and both are loaded. MERGED means an"
 echo "existing AGENTS.md or .claude/CLAUDE.md kept its own content in place,"
 echo "with ours appended as a managed block that stays in sync on re-run."
+
+if [ "$SYMLINK_FAILURES" -gt 0 ]; then
+    exit 1
+fi
