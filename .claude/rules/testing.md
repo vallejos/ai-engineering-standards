@@ -7,7 +7,7 @@ a task as complete. It is loaded at session start alongside `CLAUDE.md`, so
 it's always in effect — there's no need to invoke it.
 
 For how tests should be *written* (readable, DAMP over DRY), see
-`.claude/rules/resilience.md` §4. For a systematic checklist of the boundary
+`.claude/rules/resilience.md` §6. For a systematic checklist of the boundary
 conditions to cover on async/network code, use the `edge-case-audit` skill.
 
 ## Core requirement
