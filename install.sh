@@ -4,7 +4,7 @@
 #
 # Usage:
 #   /path/to/ai-engineering-standards/install.sh [--dry-run] [target_dir]
-#   /path/to/ai-engineering-standards/install.sh --user [--dry-run]
+#   /path/to/ai-engineering-standards/install.sh --user [--dry-run] [--sync]
 #
 # Project mode (default): installs AGENTS.md, .claude/CLAUDE.md,
 # .claude/rules/, and .claude/skills/ into target_dir (current directory if
@@ -46,6 +46,17 @@
 # instructions in the same read, and re-running this script keeps the
 # appended block in sync without ever touching what's above it.
 #
+# Pass --sync for a different trade-off: if CLAUDE.md, rules/, or skills/
+# already exist as real (non-symlinked) content — most often stale copies
+# left over from an older install that predates symlink support on this
+# machine — each one is renamed aside as a timestamped `.bak-<timestamp>`
+# file/directory (never deleted) and replaced with a real symlink. This is
+# for a personal, single-owner setup (typically --user mode) where you want
+# a `git pull` in this repo to be the only thing you ever have to do again;
+# it is a poor fit for a shared team repo where a colleague's real
+# customization might be sitting at that path. See update.sh for the
+# one-command version of "pull, then --sync".
+#
 # POSIX sh compatible. Safe to run multiple times (idempotent).
 
 set -eu
@@ -56,6 +67,7 @@ set -eu
 
 DRY_RUN=0
 USER_MODE=0
+SYNC_MODE=0
 TARGET_ARG=""
 
 # Counts symlink attempts that didn't produce a real symlink, so the script
@@ -64,10 +76,13 @@ TARGET_ARG=""
 # can't just be "ln's exit code was non-zero".
 SYMLINK_FAILURES=0
 
+# Counts --sync backups actually performed, for the closing summary.
+SYNC_BACKUPS=0
+
 usage() {
     cat <<'USAGE'
 Usage: install.sh [--dry-run] [target_dir]
-       install.sh --user [--dry-run]
+       install.sh --user [--dry-run] [--sync]
 
 Project mode (default): symlinks/merges AGENTS.md and .claude/ into
 target_dir (current directory if omitted).
@@ -79,6 +94,12 @@ Cannot be combined with an explicit target_dir.
 
 Options:
   --user          Install into ~/.claude/ instead of a project directory.
+  --sync          If CLAUDE.md/rules/skills already exist as real,
+                  non-symlinked content, rename each one aside as a
+                  timestamped backup (never deleted) and replace it with a
+                  real symlink, instead of merging/coexisting with it. For
+                  a personal setup you want to keep in sync with a single
+                  `git pull` — not for a shared team repo. See update.sh.
   --dry-run, -n   Show exactly what would be linked, merged, or modified,
                   without touching anything on disk.
   --help, -h      Show this help and exit.
@@ -88,6 +109,7 @@ USAGE
 for arg in "$@"; do
     case "$arg" in
         --user) USER_MODE=1 ;;
+        --sync) SYNC_MODE=1 ;;
         --dry-run|-n) DRY_RUN=1 ;;
         --help|-h) usage; exit 0 ;;
         -*) echo "Error: unknown option: $arg" >&2; usage >&2; exit 1 ;;
@@ -237,6 +259,43 @@ do_replace() {
     mv "$1" "$2"
 }
 
+# sync_backup_if_needed DEST SRC_FOR_PREVIEW
+# Only acts when --sync was passed. If DEST already exists as real,
+# non-symlinked content, renames it aside as a timestamped backup — never
+# deletes it — freeing up the path so the caller's normal "doesn't exist
+# yet" branch creates a fresh symlink there instead of merging/coexisting.
+# Returns 0 and lets the caller continue normally (whether or not a backup
+# happened) in the real run; returns 2 in dry-run when a backup+relink
+# would happen, so the caller can print one clean preview line and stop,
+# rather than also printing what its normal merge/coexist branch would say.
+sync_backup_if_needed() {
+    dest="$1"
+    src_for_preview="$2"
+
+    [ "$SYNC_MODE" -eq 1 ] || return 0
+    [ -e "$dest" ] || return 0
+    [ -L "$dest" ] && return 0
+
+    ts="$(date +%Y%m%d-%H%M%S)"
+    backup_dest="${dest}.bak-${ts}"
+
+    if [ "$DRY_RUN" -eq 1 ]; then
+        echo "  WOULD BACK UP $dest"
+        echo "                -> $backup_dest, then link fresh -> $src_for_preview"
+        return 2
+    fi
+
+    if ! mv "$dest" "$backup_dest" 2>/dev/null; then
+        echo "  ERROR   could not back up $dest -> $backup_dest" >&2
+        echo "          Resolve manually, then re-run with --sync." >&2
+        SYMLINK_FAILURES=$((SYMLINK_FAILURES + 1))
+        return 1
+    fi
+    echo "  BACKED UP $dest"
+    echo "             -> $backup_dest (nothing deleted; --sync mode)"
+    SYNC_BACKUPS=$((SYNC_BACKUPS + 1))
+}
+
 # sync_managed_block SRC DEST LABEL
 # For files where only one filename is ever read by convention (AGENTS.md,
 # .claude/CLAUDE.md) — so a coexist-under-a-different-name strategy wouldn't
@@ -330,6 +389,17 @@ link_or_embed() {
             return 0
         fi
     fi
+
+    # Bare call, not wrapped in `if`: a non-zero return here (1 = error, 2 =
+    # dry-run preview already printed) would otherwise trigger `set -e` and
+    # silently abort the whole script before rules/ or skills/ ever get
+    # processed. Routing it through `||` is exempt from that per POSIX, and
+    # the assignment on the right always itself succeeds.
+    sync_status=0
+    sync_backup_if_needed "$dest" "$src" || sync_status=$?
+    case "$sync_status" in
+        1|2) return 0 ;;
+    esac
 
     if [ ! -e "$dest" ]; then
         if do_ln "$src" "$dest"; then
@@ -448,6 +518,12 @@ merge_dir() {
         return 0
     fi
 
+    sync_status=0
+    sync_backup_if_needed "$dest_dir" "$src_dir/" || sync_status=$?
+    case "$sync_status" in
+        1|2) return 0 ;;
+    esac
+
     if [ ! -e "$dest_dir" ]; then
         if do_ln "$src_dir" "$dest_dir"; then
             echo "  LINKED  $dest_dir/ -> $src_dir/ (whole directory)"
@@ -519,6 +595,11 @@ elif [ "$SYMLINK_FAILURES" -gt 0 ]; then
     echo "symlink issue to pick up the rest."
 else
     echo "Done. $TARGET_DIR now points at the standards in $SOURCE_DIR."
+fi
+if [ "$SYNC_BACKUPS" -gt 0 ]; then
+    echo "$SYNC_BACKUPS item(s) had pre-existing real content backed up (not"
+    echo "deleted) and replaced with a symlink — see BACKED UP lines above for"
+    echo "exactly where each backup was placed."
 fi
 echo "SKIP means an item was left completely untouched with no change made"
 echo "(only for a genuine double-collision, or something that isn't a"
