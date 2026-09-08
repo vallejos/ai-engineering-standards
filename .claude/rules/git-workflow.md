@@ -50,6 +50,36 @@ mid-flight.
   description and explain how the human should review it differently (e.g.
   "review the script that generated this, not the diff itself").
 
+## Risk-based review requirements
+
+PR size (above) and review necessity are two different axes — a 20-line
+change to an auth check is higher-risk than a 300-line addition of an
+isolated new utility module. As AI agents generate a growing share of PRs,
+gating mandatory human review on *what* a change touches, not just how big
+it is, is what lets low-risk changes move fast without starving high-risk
+ones of scrutiny:
+
+- **Mandatory human review regardless of diff size** when a change touches:
+  a public API/interface surface (including MCP tool definitions), auth/authz,
+  a non-additive database schema change or data migration, or — specific to
+  a repo like this one — the agent/skill/rule definitions themselves
+  (`.claude/rules/*`, `.claude/skills/*`, `AGENTS.md`, `.claude/CLAUDE.md`),
+  since a bad change there silently changes how every future AI-assisted
+  change in the repo gets governed.
+- **Everything else may rely on strong automated gates** (tests, lint,
+  typecheck — the quality-gate checklist in `.claude/CLAUDE.md`) without
+  mandatory human sign-off, *if* those gates are actually comprehensive. This
+  isn't a hypothetical: a five-person team that switched to exactly this
+  risk-based system (paired with tightening their lint/type-check rules and
+  raising unit test coverage to an 85% floor beforehand) saw PRs merged per
+  week rise 94%, and median merge time for non-flagged changes drop from 26
+  hours to 1.
+- **Review attention for AI-authored diffs should prioritize schema/interface
+  changes first, test coverage second, line-by-line implementation last.**
+  State (a database schema, a public interface) is the least reversible part
+  of a change; business logic behind it is comparatively cheap to regenerate
+  if it's wrong. Spend scrutiny where reversing a mistake is expensive.
+
 ## Architectural decision tracking
 
 For any decision that future engineers (human or AI) would benefit from
@@ -127,3 +157,5 @@ mid-task:
   transcript.
 - A task silently going stale because the next session has no idea where the
   last one left off.
+- A high-risk change (auth, schema, public API) slipping through with only
+  automated checks because it happened to be a small diff.

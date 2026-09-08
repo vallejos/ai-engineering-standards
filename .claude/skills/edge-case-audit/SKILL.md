@@ -134,6 +134,15 @@ directly (if small/in-scope) or flag it explicitly to the human with a
 recommendation — don't silently note a gap and move on without surfacing it
 per `.claude/rules/behaviors.md`.
 
+**Grade for signal before reporting.** Don't list a ⚠️ for every
+theoretically-possible gap regardless of how likely or how severe it is —
+outputting a wall of low-confidence or trivial findings is worse than
+outputting fewer, high-confidence ones, because it trains the human to skim
+past (or stop reading) the whole report, including the one finding that
+actually mattered. If you're not confident a gap is real or worth the
+human's attention, say so explicitly with lower emphasis, or omit it, rather
+than padding the list to look thorough.
+
 ```markdown
 ## Edge-Case Audit: <feature/PR name>
 
@@ -166,6 +175,8 @@ per `.claude/rules/behaviors.md`.
   cause was an unhandled error or empty-data case.
 - A rejected promise nobody awaited or caught, surfacing only as a console
   warning until it eventually takes down a background job or a queue worker.
+- A report so padded with low-confidence noise that the human stops reading
+  before reaching the one finding that actually mattered.
 - An "all or nothing" feature that works great on a fast connection or a
   fast machine and is simply unusable — not degraded, unusable — on a
   throttled connection or a low-end device.
