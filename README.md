@@ -21,6 +21,8 @@ AI tools can generate endless output, but human engineers own the ultimate outco
 .
 ├── AGENTS.md                  # Root agent instructions (Claude Code, Cursor, Gemini CLI)
 ├── install.sh                 # Deployment script to symlink rules into target repos
+├── update.sh                  # One-command "git pull + relink" for a
+│                              #   personal --user setup (see --sync)
 ├── .claude/
 │   ├── CLAUDE.md              # Global Claude Code configuration & quality gates
 │   ├── rules/
@@ -168,7 +170,34 @@ own AI config — it never overwrites or deletes anything:
 It's idempotent — re-run either mode any time to pick up updates. Use
 `--dry-run` to see exactly what it would do first. The script is POSIX `sh`
 and works on macOS, Linux, and WSL; on native Windows, run it from WSL or
-Git Bash (with Developer Mode enabled for symlinks).
+Git Bash. Git Bash needs two things for real symlinks, not just one:
+**Developer Mode enabled** (Settings → Privacy & security → For developers,
+or jump straight there with `ms-settings:developers`) *and*
+**`export MSYS=winsymlinks:nativestrict`** in your shell profile. Developer
+Mode alone isn't enough — without that environment variable, Git Bash's own
+`ln -s` silently falls back to *copying* the file instead of linking it,
+even with Developer Mode on, and still reports success.
+
+#### Keeping a personal setup in sync (`update.sh`)
+
+If you already ran `--user` before this symlink fix was in place, your
+`~/.claude/CLAUDE.md`, `rules/`, and `skills/` are likely real copies, not
+symlinks — which means they went stale the moment you made them, and won't
+pick up any future change to this repo on their own. Fix that once with:
+
+```bash
+~/ai-engineering-standards/update.sh
+```
+
+This pulls the latest commits and runs `install.sh --user --sync`, which
+renames any real (non-symlinked) content aside as a timestamped backup —
+**never deletes it** — and replaces it with a real symlink. From then on,
+`update.sh` (or a plain `git pull`) is the only thing you ever need to run
+again; every future change shows up automatically. `--sync` is meant for a
+personal, single-owner `~/.claude` — it's a poor fit for a shared team repo,
+where `install.sh` (without `--sync`) should be used instead so a
+colleague's real customization is merged alongside yours rather than backed
+up and replaced.
 
 ---
 
