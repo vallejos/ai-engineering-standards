@@ -23,6 +23,16 @@ the accountability risk onto whoever approves it without truly checking. Small
 PRs, explicit verification evidence, and spec-first planning are how we keep
 the human's approval meaningful instead of theatrical.
 
+Sign-off is also literally where accountability and traceability live: once
+a human signs off on a change, it's on record who saw and approved what went
+out, not just who wrote it. Reviews additionally reduce the "bus factor" —
+when someone besides the author has actually looked at how a change works,
+the project survives that person moving on. This is exactly the mechanism
+`.claude/rules/git-workflow.md`'s risk-based review requirements protect:
+letting low-risk, well-guarded changes move fast is only safe because the
+higher-risk ones (auth, schema, public interfaces, and this repo's own rule
+and skill definitions) still get a human checkpoint.
+
 ## 2. Product taste doesn't come from the model either
 
 Models are very good at producing *a* solution to a stated problem. They are
@@ -122,6 +132,15 @@ invokable skills, and a `CLAUDE.md` that imports `AGENTS.md` since Claude
 Code doesn't read it natively) layered on top for Claude Code users, but
 nothing in `.claude/` should ever contradict `AGENTS.md` — if it does, that's
 a bug in this repo, not a feature.
+
+This isn't unique to picking a coding agent — it's the same trade-off any
+team makes building on top of a fast-moving AI vendor landscape. One
+engineering org building internal AI tooling put it plainly: build the
+abstractions so a better model or vendor can be swapped in later, and don't
+get so wed to your own systems that replacing one with a superior
+third-party option becomes unthinkable. `AGENTS.md` is this repo's version
+of that abstraction layer — a place to stand that doesn't assume any one
+vendor keeps being the right choice indefinitely.
 
 ## 7. Why ~150 lines per PR, specifically
 
