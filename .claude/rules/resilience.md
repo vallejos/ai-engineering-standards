@@ -69,6 +69,13 @@ an incident.
   cached/stale data with a staleness indicator" or "disable a non-critical
   widget" over "500 the whole page" whenever the failing dependency isn't
   actually required for the primary user-facing outcome.
+- **Gate risky rollouts behind a flag with automated monitoring, not a single
+  all-or-nothing deploy.** Ship behind a feature flag, roll out gradually,
+  and have something — a human or an automated check — watching the relevant
+  metrics for degradation before it reaches everyone. This is the same
+  principle as the rest of this section applied to deployment itself: a
+  rollout is a duress condition you can choose to enter gradually instead of
+  all at once.
 
 ## 3. No silent drops
 
@@ -192,6 +199,7 @@ human rather than silently skipping it.
 | "This is throwaway/prototype code, standards don't apply." | Prototype code has a well-documented tendency to end up in production unchanged. If it's genuinely throwaway, say so explicitly and get sign-off that it won't ship as-is. |
 | "It's a small service, it doesn't need a design doc." | Size of implementation isn't the bar — whether other systems or teams will build on this decision is. A ten-line service other things depend on needs the same "alternatives considered" scrutiny as a large one. |
 | "We can add a fallback later if this turns out to be critical." | Graceful degradation can't be retrofitted after the fact onto a system that was never designed to shed load — the usual way this gets discovered is during the incident that actually needed it. |
+| "We can just let AI review its own code, no human needed." | The confirmed real-world examples of dropping human review entirely are early-stage, no-product-market-fit startups where shipping a broken prototype isn't a big deal — not a general-purpose pattern. Even the most aggressive production teams keep a human checkpoint (a scope decision, a sign-off, a triage step) somewhere in the loop. |
 
 ## Anti-patterns this rule prevents
 
