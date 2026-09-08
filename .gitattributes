@@ -1,0 +1,5 @@
+# Shell scripts must stay LF regardless of a contributor's local
+# core.autocrlf setting -- a CRLF shebang line or CRLF-terminated script
+# fails outright on Linux/macOS/WSL, which is the primary audience for
+# install.sh and update.sh (see their own header comments).
+*.sh text eol=lf
