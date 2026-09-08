@@ -32,6 +32,32 @@ Before implementing a change:
    conditions identified above, before or alongside the implementation —
    don't leave test-writing as an afterthought bolted on at the end.
 
+## AI-generated tests need a "written to pass" check
+
+A test suite passing is not the same as the tests being meaningful — this is
+a sharper problem when the agent writing the code is also the one writing
+the tests for it, because both can share the same blind spot. Before
+counting a generated test as coverage, check that it would actually fail if
+the implementation were wrong:
+
+- Does the test assert on real, independent expected output — not on
+  whatever the implementation currently produces, and not on a mock that was
+  configured to return the "right" answer regardless of what's under test?
+- Would this test catch a plausible bug in the implementation it's testing
+  (an off-by-one, a flipped condition, a missing edge case), or would it
+  pass unchanged even if that bug were introduced?
+- Is the assertion specific (`expect(total).toBe(42)`) rather than vacuous
+  (`expect(result).toBeDefined()`, `expect(response.ok).toBe(true)` when the
+  real risk is in the response *body*)?
+
+This is a recognized, common failure mode, not a hypothetical: industry
+reporting on AI-era code review consistently flags that automated review
+tools are still weak at telling a good test apart from one that was merely
+written to pass, and at least one engineering org generating AI tests at
+scale (thousands per month) found it necessary to build a dedicated second
+system whose only job is critiquing the first system's generated tests
+before trusting them as real coverage.
+
 ## Execution standard
 
 Before reporting a change as complete:
@@ -70,3 +96,5 @@ A complete status report includes:
 - Silently skipping test execution because it's slow or inconvenient.
 - Describing a fix as complete based on code inspection alone, when running
   it was possible and was skipped.
+- A generated test that passes because it asserts on the implementation's
+  own output rather than an independently-derived expected value.
