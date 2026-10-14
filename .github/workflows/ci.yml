@@ -1,0 +1,39 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tool-name lint (Claude wiring stays inside .claude/)
+        run: sh scripts/tool-name-lint.sh
+      - name: Shell syntax
+        run: sh -n install.sh && sh -n update.sh && sh -n scripts/tool-name-lint.sh
+      - name: install.sh --agents-only writes a pinned real file
+        run: |
+          target=$(mktemp -d)
+          sh install.sh --agents-only "$target"
+          test -f "$target/AGENTS.md" && test ! -L "$target/AGENTS.md"
+          head -n 1 "$target/AGENTS.md" | grep -q 'Pinned copy of ai-engineering-standards AGENTS.md'
+          test ! -e "$target/.claude"
+      - name: install.sh --user refuses a claude-infra managed home
+        run: |
+          home=$(mktemp -d)
+          mkdir -p "$home/.claude-infra/state"
+          if HOME="$home" sh install.sh --user; then exit 1; fi
+          test ! -e "$home/.claude"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+      - name: claude plugin validate
+        run: |
+          npm install --global @anthropic-ai/claude-code
+          claude plugin validate . --strict

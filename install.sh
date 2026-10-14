@@ -68,6 +68,7 @@ set -eu
 DRY_RUN=0
 USER_MODE=0
 SYNC_MODE=0
+AGENTS_ONLY=0
 TARGET_ARG=""
 
 # Counts symlink attempts that didn't produce a real symlink, so the script
@@ -83,6 +84,7 @@ usage() {
     cat <<'USAGE'
 Usage: install.sh [--dry-run] [target_dir]
        install.sh --user [--dry-run] [--sync]
+       install.sh --agents-only [--dry-run] [target_dir]
 
 Project mode (default): symlinks/merges AGENTS.md and .claude/ into
 target_dir (current directory if omitted).
@@ -90,10 +92,17 @@ target_dir (current directory if omitted).
 User mode (--user): installs only .claude/CLAUDE.md, rules/, and skills/
 into ~/.claude/, which Claude Code applies to every project on this
 machine automatically. AGENTS.md is skipped (no tool reads it from $HOME).
-Cannot be combined with an explicit target_dir.
+Cannot be combined with an explicit target_dir. Refuses to run when
+~/.claude is managed by claude-infra (~/.claude-infra/state exists).
+
+Agents-only mode (--agents-only): writes a pinned copy of AGENTS.md (a
+real file, not a symlink) into target_dir and nothing else: no .claude/.
+For team repos, so every teammate gets the same version through git.
+Re-run to update the copy to this checkout's version.
 
 Options:
   --user          Install into ~/.claude/ instead of a project directory.
+  --agents-only   Write only a pinned copy of AGENTS.md into target_dir.
   --sync          If CLAUDE.md/rules/skills already exist as real,
                   non-symlinked content, rename each one aside as a
                   timestamped backup (never deleted) and replace it with a
@@ -110,6 +119,7 @@ for arg in "$@"; do
     case "$arg" in
         --user) USER_MODE=1 ;;
         --sync) SYNC_MODE=1 ;;
+        --agents-only) AGENTS_ONLY=1 ;;
         --dry-run|-n) DRY_RUN=1 ;;
         --help|-h) usage; exit 0 ;;
         -*) echo "Error: unknown option: $arg" >&2; usage >&2; exit 1 ;;
@@ -127,6 +137,20 @@ done
 if [ "$USER_MODE" -eq 1 ] && [ -n "$TARGET_ARG" ]; then
     echo "Error: --user installs into \$HOME/.claude and can't take an explicit target_dir ($TARGET_ARG)." >&2
     usage >&2
+    exit 1
+fi
+
+if [ "$AGENTS_ONLY" -eq 1 ] && { [ "$USER_MODE" -eq 1 ] || [ "$SYNC_MODE" -eq 1 ]; }; then
+    echo "Error: --agents-only can't be combined with --user or --sync." >&2
+    usage >&2
+    exit 1
+fi
+
+# claude-infra owns ~/.claude on machines where it is installed. Two installers
+# writing the same files would undo each other on every run.
+if [ "$USER_MODE" -eq 1 ] && [ -d "${HOME:-}/.claude-infra/state" ]; then
+    echo "~/.claude is managed by claude-infra." >&2
+    echo "Bump standards.lock in claude-infra and run 'claudex update' instead." >&2
     exit 1
 fi
 
@@ -547,6 +571,34 @@ merge_dir() {
         link_item_coexist "$item" "$dest_dir" "$name"
     done
 }
+
+# ---------------------------------------------------------------------------
+# Agents-only: a pinned copy of AGENTS.md, nothing else
+# ---------------------------------------------------------------------------
+
+if [ "$AGENTS_ONLY" -eq 1 ]; then
+    PIN_MARKER="<!-- Pinned copy of ai-engineering-standards AGENTS.md"
+    version="$(git -C "$SOURCE_DIR" describe --tags --always 2>/dev/null || echo unknown)"
+    dest="$TARGET_DIR/AGENTS.md"
+    # Only ever replace our own pinned copy; anything else is the project's own file.
+    if [ -L "$dest" ] || { [ -e "$dest" ] && ! head -n 1 "$dest" | grep -qF "$PIN_MARKER"; }; then
+        echo "Error: $dest already exists and is not a pinned copy from this repo; leaving it untouched." >&2
+        echo "Move it aside (or merge it by hand) and re-run." >&2
+        exit 1
+    fi
+    if [ "$DRY_RUN" -eq 1 ]; then
+        echo "  [dry-run] would write $dest (pinned at $version)"
+        exit 0
+    fi
+    tmp="$dest.tmp.$$"
+    {
+        echo "$PIN_MARKER @ $version. Update with: install.sh --agents-only -->"
+        cat "$SOURCE_DIR/AGENTS.md"
+    } > "$tmp"
+    mv "$tmp" "$dest"
+    echo "  PINNED  $dest (ai-engineering-standards@$version). Commit it to the project."
+    exit 0
+fi
 
 # ---------------------------------------------------------------------------
 # Link AGENTS.md
