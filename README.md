@@ -33,7 +33,9 @@ AI tools can generate endless output, but human engineers own the ultimate outco
 │   │   │                      #   rationale tracking
 │   │   ├── resilience.md      # Failure recovery, graceful degradation,
 │   │   │                      #   design-doc guardrails, & DAMP testing
-│   │   └── behaviors.md       # Non-negotiable agent behavioral guardrails
+│   │   ├── behaviors.md       # Non-negotiable agent behavioral guardrails
+│   │   └── knowledge.md       # What to read from, and write back to, a
+│   │                          #   private knowledge store
 │   └── skills/
 │       ├── spec-first/        # Skill to convert vague prompts into structured specs
 │       ├── anti-surrender/    # Skill to enforce trade-off analysis & verification
@@ -70,6 +72,7 @@ executable workflow to actually meet it.
 | `git-workflow.md` | Small, coherent commits; semantic commit/PR titles; ~150-line bounded PRs; risk-based mandatory-review triggers (API/auth/schema/agent-skill changes) independent of diff size; ADRs for durable decisions; `state.md` for cross-session context handoff. | Keeps every PR small enough that human review is genuine evaluation, not a rubber stamp — and ensures a small, high-risk diff doesn't skip review just because it's small. Risk-based triage is validated in production: one team saw PRs merged per week rise 94% after adopting it. |
 | `resilience.md` | Explicit timeouts/retries/fallbacks on network calls; graceful system degradation (circuit breakers, priority-based load shedding, designing the degraded state up front) under real duress; design-doc guardrails (goals/non-goals/alternatives considered) for architectural changes; no silently-swallowed async errors; critical-path (LCP-first) rendering over heavy client abstractions; DAMP over DRY in tests; an anti-rationalization table for common excuses to skip tests/specs/docs. | Most production incidents come from the unhappy path being unhandled, not the happy path being wrong. Inspired by Addy Osmani's performance and resilience engineering principles, plus operational learnings from Netflix's (graceful degradation under duress, service tiering) and Google's (mandatory design docs with alternatives considered) engineering cultures. |
 | `behaviors.md` | Non-negotiable agent behaviors: surface assumptions before coding, stop on requirement conflicts, push back on bad patterns/security risks/tech debt, prefer simple solutions over clever abstractions, strict file-scope bounding. | Defines the baseline posture an agent should hold on *every* task — the always-on counterpart to the deliberate `anti-surrender` checkpoint below. Grounded in the same "context, not control" pairing of autonomy with accountability that high-trust engineering cultures like Netflix's rely on. |
+| `knowledge.md` | Read the knowledge index before non-trivial work; write back only durable facts (decisions, constraints, preferences, gotchas), never task progress; update rather than duplicate; codebase decisions become ADRs, personal knowledge goes to the store; never store secrets. | Keeps context across sessions without a store that fills with stale status. Where the store lives is wiring, not standard. |
 
 ### Skills (`.claude/skills/`)
 
