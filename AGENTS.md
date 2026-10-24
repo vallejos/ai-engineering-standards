@@ -144,7 +144,21 @@ Claude Code.
 
 ---
 
-## 8. Tool-Specific Configuration
+## 8. Knowledge Store
+
+- If a knowledge index is available, read it before non-trivial work and open
+  only the notes it points to.
+- Write back only durable facts: decisions, constraints, preferences, gotchas.
+  Never write task progress.
+- Update an existing note instead of duplicating it. One subject per note.
+- A decision about a codebase becomes an ADR in that repo. Personal or
+  cross-project knowledge goes to the knowledge store.
+- Never store secrets or credentials.
+- See `.claude/rules/knowledge.md` for the detailed workflow.
+
+---
+
+## 9. Tool-Specific Configuration
 
 This file is the portable baseline. Tool-specific behavior, quality gates, and
 topic-specific rules live in:
@@ -153,7 +167,7 @@ topic-specific rules live in:
   safety, and quality gates. Imports this file so Claude Code loads it.
 - `.claude/rules/` — Topic-specific rules loaded at session start alongside
   `CLAUDE.md`: `spec-first.md`, `testing.md`, `git-workflow.md`,
-  `resilience.md`, and `behaviors.md`.
+  `resilience.md`, `behaviors.md`, and `knowledge.md`.
 - `.claude/skills/` — Invokable Claude Code skills: `spec-first`,
   `anti-surrender`, `edge-case-audit`, and `code-simplify`.
 
