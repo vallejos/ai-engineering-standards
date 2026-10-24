@@ -1,6 +1,6 @@
 {
   "name": "standards",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Method skills from ai-engineering-standards: spec-first, anti-surrender, edge-case-audit, code-simplify",
   "author": { "name": "vallejos" },
   "repository": "https://github.com/vallejos/ai-engineering-standards",
